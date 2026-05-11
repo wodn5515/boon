@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push * main)",
+      "Bash(git push * main *)",
+      "Bash(git push * stage)",
+      "Bash(git push * stage *)",
+      "Bash(git push --force *)",
+      "Bash(git push * --force *)",
+      "Bash(git merge *)",
+      "Bash(git reset --hard *)",
+      "Bash(gh pr merge *)",
+      "Bash(aws *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "if": "Bash(git *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/validate-git.sh",
+            "timeout": 5,
+            "statusMessage": "git 명령어 검증 중..."
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__aws__call_aws",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/validate-aws.sh",
+            "timeout": 5,
+            "statusMessage": "AWS 프로파일 검증 중..."
+          }
+        ]
+      }
+    ]
+  }
+}
