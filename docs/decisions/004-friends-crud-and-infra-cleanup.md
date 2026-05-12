@@ -211,3 +211,49 @@ worker가 코드 구현 라운드에서 자율 판단으로 처리한 사항 중
 - dev 서버에서 pglite 안정화 (WASM 경로 회피) — 통합 테스트와 E2E가 같은 in-memory 백엔드를 쓰면 일관성 ↑
 - nonce 기반 strict CSP (V2 보안 슬라이스)
 - `getDb()` lazy factory 패턴으로 dynamic import 환원 (V2 또는 별도 슬라이스)
+
+---
+
+## peer 검증 후 보강 — sfx 라운드 1 (2026-05-12, append)
+
+sfx 라운드 1 검증에서 🔴 1건 + 🟡 6건 + 🟢 4건 발견. worker가 7 커밋(`3d45633..dd040c1`)으로 즉시 청산. 그 중 🔴 #1이 **본 결정 로그의 핵심 가정을 정정**하므로 결정 로그 본문 정정 + 사후 트레이스 보존 의무로 다음을 명시:
+
+### 🔴 정정-1: §A "RLS 자동 필터" 가정의 부분 무효
+
+**원래 결정 (§A·§C·§D)**: RLS 정책(`auth.uid() = user_id`)이 본인 데이터만 자동 필터링하므로 application-layer는 RLS를 신뢰하면 됨.
+
+**sfx 라운드 1 발견**: 본 프로젝트의 DB 접근 경로는 두 갈래.
+- (a) **Supabase PostgREST** — 클라이언트 JWT를 함께 보내고 PostgreSQL이 `auth.uid()`를 그 JWT에서 추출. RLS 정상 작동. → 원래 가정 유효
+- (b) **drizzle-orm + postgres-js 직결** (본 슬라이스에서 도입한 경로) — Supabase가 제공한 DB connection string은 보통 `postgres` SUPERUSER 권한이거나 `BYPASSRLS` 속성이 활성화된 role. SUPERUSER는 **모든 RLS 정책을 우회**. 즉 RLS만 신뢰하면 `listFriends()` 호출자가 **모든 사용자의 친구 row 누출** 가능
+
+**정정 채택**: 
+- **application-layer 단일 방어선이 필수**: `listFriends`/`getFriendById` 등 모든 쿼리에 `eq(friends.user_id, currentUser.id)` 명시. worker 커밋 `3d45633`에 반영
+- **RLS는 두 번째 방어선으로 유지**: PostgREST 또는 비-SUPERUSER role을 후속에 도입할 경우 동작. defense-in-depth 패턴
+- **service_role 키 미사용 보장**: drizzle 연결은 `DATABASE_URL`(non-SUPERUSER가 이상적이지만 Supabase 기본 connection이 SUPERUSER인 한 application-layer 방어 필수)
+
+**영향**:
+- §A 본문 가정의 핵심 변경 — RLS 단독 신뢰 ❌, application-layer 필수 ⭕
+- §C `friends_own` 정책은 그대로 유지(엣지 진입 대비) — 의미는 "최소 보호선"으로 격하
+- categories-crud, entries-crud 슬라이스에서도 **동일 패턴 유지** — 모든 쿼리에 user_id 필터 명시. RLS는 보조
+
+**V2 메모**: Supabase가 non-SUPERUSER role을 권장하는 connection 패턴을 제공하면 그쪽으로 전환. 또는 PostgREST 경로만 쓰도록 drizzle 직결 제거 검토 (다만 type-safety·성능 트레이드오프 큼)
+
+### 🟡 보강 (5건, worker 청산)
+- **#2 drizzle journal 정합성** (커밋 `86caacc`): `0002_rls.sql`·`0003_users_unique.sql`을 journal에 등록. 0001 unique 제거 + 0003 분리. `npm run db:generate`에서 "No schema changes" 확인
+- **#3 CSP `form-action` 누락** (커밋 `c27bcc7`): Firefox에서 Server Action POST 시 `form-action` directive가 self만 허용해 OAuth redirect 회귀 위험. `https://*.supabase.co` 추가
+- **#4 callback unique 충돌 처리** (커밋 `a8ffc12`): `onConflictDoNothing({ target: users.id })` 명시 + `try/catch` SQLSTATE 23505 감지. ERROR_COPY에 `account_conflict`·`upsert_failed` 2종 추가
+- **#5 `(authenticated)` layout 이중 방어** (커밋 `74b00f6`): middleware 우회 (`E2E_BYPASS_AUTH` 누출, edge runtime 버그 등) 대비. layout에서 `getCurrentUser()` 후 null이면 `redirect('/login')`. defense-in-depth
+- **#8 LIKE 와일드카드 escape** (커밋 `dd040c1`): 검색 `?q=`에 `%`·`_`·`\\` 들어와도 안전. 사용자 입력 ilike 매칭 정확도 ↑
+
+### 🟡 미반영 (2건, deferred)
+- **#6 pglite 헬퍼 GUC reset**, **#7 setAuthContext async** — `tests/integration/db-test-helpers.ts`의 시그니처를 변경해야 하는데, spec이 이미 동기 호출을 가정해 호출 중. **test-writer 영역**이라 worker는 손대지 않음. 다음 슬라이스(categories) 통합 테스트 첫 spec 추가 시점에 test-writer가 spec과 함께 갱신
+- 회귀 방어선 보강이라 머지 차단 아님
+
+### 🟢 미반영 (3건, 의도된 보수적 설계)
+- **#9 보수적 중복** — application-layer 필터 + RLS 정책 양쪽 유지는 정정-1의 의도 그대로 (defense-in-depth)
+- **#10 결정 로그 §K** — README 동기화 점검은 본 PR에서 worker가 수행, 추가 변경 없음 명시
+- **#11 Node-only 안전** — pglite/JS Map은 Node 환경(테스트) 한정. production 빌드에 안 들어가는 게 확실
+
+## V2 메모 추가 (sfx 라운드 1에서 파생)
+- non-SUPERUSER DB role 전환 (Supabase connection 옵션 등장 시) — 정정-1 후속
+- pglite 헬퍼 시그니처 보강 (GUC reset, async setAuthContext) — test-writer 라운드와 동시 처리
