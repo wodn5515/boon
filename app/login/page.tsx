@@ -41,6 +41,9 @@ const ERROR_COPY: Record<string, string> = {
   oauth_init: "Google 로그인 시작에 실패했어요. 잠시 후 다시 시도해 주세요.",
   missing_email: "Google 계정의 이메일을 받아오지 못했어요. 권한을 허용했는지 확인해 주세요.",
   unsupported_provider: "현재는 Google 로그인만 지원해요.",
+  account_conflict:
+    "이 이메일로 이미 다른 계정이 연결되어 있어요. 기존 계정으로 로그인해 주세요.",
+  upsert_failed: "계정 정보를 저장하는 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
 };
 
 type LoginPageProps = {

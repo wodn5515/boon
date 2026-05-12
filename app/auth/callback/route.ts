@@ -95,14 +95,37 @@ export async function GET(request: Request) {
   const { db } = await import("@/db/client");
   const { users } = await import("@/db/schema/users");
 
-  await db
-    .insert(users)
-    .values({
-      id: user.id,
-      email: user.email,
-      google_id: googleId,
-    })
-    .onConflictDoNothing();
+  // `target: users.id` 로 명시 — id PK 충돌(정상 재로그인) 만 사일런트 무시한다.
+  // 0003 마이그레이션의 email / google_id unique 제약 위반 시에는 그대로 throw → catch 로 가시화.
+  // (sfx 라운드 1 🟡 #4) Supabase Auth 콘솔 user 삭제 후 같은 이메일 재가입 시 새 id + 같은 email →
+  // 기본 onConflictDoNothing() 는 첫 발견 충돌(email unique) 도 무시해 사용자가 로그인 성공한 듯
+  // 보이지만 친구 추가 시 FK 위반 500 으로 사일런트 사고. target 명시로 가드.
+  try {
+    await db
+      .insert(users)
+      .values({
+        id: user.id,
+        email: user.email,
+        google_id: googleId,
+      })
+      .onConflictDoNothing({ target: users.id });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[auth/callback] users upsert failed", {
+      userId: user.id,
+      message,
+    });
+    // Postgres unique violation 의 SQLSTATE 23505. drizzle 은 원본 에러를 그대로 throw.
+    const isUniqueViolation =
+      /unique|duplicate key|23505/i.test(message) ||
+      (typeof (e as { code?: string }).code === "string" &&
+        (e as { code?: string }).code === "23505");
+    const errKind = isUniqueViolation ? "account_conflict" : "upsert_failed";
+    return NextResponse.redirect(
+      new URL(`/login?error=${errKind}`, url),
+      302,
+    );
+  }
 
   return NextResponse.redirect(new URL("/", url), 302);
 }
