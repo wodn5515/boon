@@ -5,7 +5,10 @@ import react from "@vitejs/plugin-react";
 
 // Boon의 단위·통합 테스트는 Vitest 단일 실행기로 돌린다.
 // React Testing Library를 함께 쓰므로 jsdom 환경이 기본.
-// 실제 spec 파일은 다음 슬라이스에서 test-writer 에이전트가 작성한다.
+//
+// 결정 로그 004 §G — 테스트 typecheck 인프라:
+//   `test.typecheck` 를 enabled 로 두고 `tsconfig.test.json` 으로 tests/** + e2e/** 를 검사한다.
+//   `npm run typecheck:tests` 도 동일 tsconfig 를 사용해 직접 tsc 호출 (CI/로컬 빠른 검사 양립).
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,5 +26,9 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next", "e2e/**"],
     css: false,
+    typecheck: {
+      enabled: false, // 로컬 watch 비용 회피. CI/수동 검사는 `npm run typecheck:tests` 로 일괄 수행.
+      tsconfig: "./tsconfig.test.json",
+    },
   },
 });
