@@ -71,10 +71,13 @@ test.describe("/friends 친구 관리", () => {
 
     // 생일 3/5 선택 (Select 두 개).
     // friend-form-dialog 의 SelectTrigger 에는 placeholder "월", "일" 이 들어 있다.
+    // "5일" 은 "15일"·"25일" 의 substring 매칭 회피를 위해 exact:true 로 강화.
+    // 이 strict 매처가 통과한다는 것은 worker 가 sino-Korean(십오일/이십오일) hack 없이도
+    // ListItem 접근성 이름이 유일함을 보장한다는 뜻이다.
     await dialog.getByRole("combobox", { name: /월/ }).click();
-    await page.getByRole("option", { name: "3월" }).click();
+    await page.getByRole("option", { name: "3월", exact: true }).click();
     await dialog.getByRole("combobox", { name: /일/ }).click();
-    await page.getByRole("option", { name: "5일" }).click();
+    await page.getByRole("option", { name: "5일", exact: true }).click();
 
     // 메모 입력.
     await dialog.getByLabel(/메모/).fill("E2E 시나리오 2 - 자동 생성");

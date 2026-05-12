@@ -147,7 +147,7 @@ describe("friends Server Action 통합", () => {
     expect(rows[0]?.is_deleted).toBe(true);
   });
 
-  it("[시나리오 13] updateFriend 는 다른 user 의 friend 를 수정할 수 없다 (RLS)", async () => {
+  it("[시나리오 13] updateFriend 는 다른 user 의 friend 를 수정할 수 없다 (application-layer + RLS 이중 방어 — RLS 단독 회귀는 시나리오 18)", async () => {
     // USER_B 가 만든 친구 row.
     const { rows: inserted } = await testDb.pg.query<{ id: string }>(
       `INSERT INTO friends (user_id, name) VALUES ($1, 'B 친구') RETURNING id`,
