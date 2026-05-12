@@ -1,9 +1,12 @@
 import * as React from "react";
 import { redirect } from "next/navigation";
 
+import { createEntry } from "@/app/(authenticated)/entries/actions";
 import { Nav } from "@/components/layout/nav";
 import { QuickAddFab } from "@/components/ui/quick-add-fab";
 import { getCurrentUser } from "@/lib/auth/user";
+import { listCategories } from "@/lib/categories/queries";
+import { listFriends } from "@/lib/friends/queries";
 
 /**
  * 인증된 라우트 그룹 레이아웃.
@@ -23,6 +26,9 @@ import { getCurrentUser } from "@/lib/auth/user";
  * sfx 라운드 1 🟡 #5 보강: defense-in-depth 로 layout 시작에서도 getCurrentUser() 호출 →
  * 미인증이면 /login redirect. 미래에 middleware matcher 예외가 잘못 추가되어도 이 그룹의
  * RSC 자식들이 친구·신세 데이터를 만지기 전에 차단되도록 두 번째 방어선을 둔다.
+ *
+ * 결정 로그 006 §I-1: QuickAddFab 에 friendOptions / categoryOptions / onSubmitAction 을
+ * server-fetched 결과로 주입 — FAB 가 모든 인증 페이지에 떠 있으니 layout 에서 한 번에 결합.
  */
 export default async function AuthenticatedLayout({
   children,
@@ -33,12 +39,31 @@ export default async function AuthenticatedLayout({
   if (!user) {
     redirect("/login");
   }
+
+  // FAB 결합: 친구·카테고리 옵션을 server 측에서 fetch.
+  // (FAB 가 client 컴포넌트라 props 로 받아야 하지만 데이터는 서버에서)
+  const [friendsList, categoriesList] = await Promise.all([
+    listFriends(),
+    listCategories(),
+  ]);
+  const friendOptions = friendsList.map((f) => ({ id: f.id, name: f.name }));
+  const categoryOptions = categoriesList.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+  }));
+
   return (
     // pb-24 = 모바일 하단 탭 네비(56px)와 FAB(56px) 겹치지 않게 본문 하단 여유.
     <div className="min-h-screen pb-24 sm:pb-0">
       <Nav />
       {children}
-      <QuickAddFab />
+      <QuickAddFab
+        friendOptions={friendOptions}
+        categoryOptions={categoryOptions}
+        onSubmitAction={createEntry}
+      />
     </div>
   );
 }

@@ -3,6 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Cake, Pencil, Plus, Trash2 } from "lucide-react";
 
+import {
+  createEntry,
+  deleteEntry,
+  updateEntry,
+} from "@/app/(authenticated)/entries/actions";
 import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
 import { EntryItem } from "@/components/entries/entry-item";
 import { FriendDeleteDialog } from "@/components/friends/friend-delete-dialog";
@@ -14,12 +19,8 @@ import { birthdayCountdownLabel } from "@/lib/friends/birthday";
 import { getFriendById, listFriends } from "@/lib/friends/queries";
 import { formatBirthday } from "@/lib/friends/types";
 import { listCategories } from "@/lib/categories/queries";
-import {
-  MOCK_CATEGORIES_FOR_SELECT,
-  MOCK_ENTRIES,
-  MOCK_FRIENDS_FOR_COMBOBOX,
-  type Entry,
-} from "@/lib/entries/types";
+import { listEntriesByFriend } from "@/lib/entries/queries";
+import type { Entry } from "@/lib/entries/types";
 
 type FriendDetailPageProps = {
   // Next.js 15: params 는 Promise.
@@ -70,45 +71,53 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
     friend.birthday_day,
   );
 
-  // === entries 슬라이스 결합: friend 의 받은 신세 목록 ===
-  // V1 골격: mock 데이터를 친구 이름으로 재라벨링해 미리보기. worker 가 listEntriesByFriend(id) 로 교체.
-  const friendEntries: Entry[] = MOCK_ENTRIES.map((e) => ({
-    ...e,
-    friend_id: friend.id,
+  // === entries 슬라이스 결합: friend 의 받은 신세 목록 (006 §B·§I-2) ===
+  // listEntriesByFriend 가 application-layer 에서 user_id·friend_id 격리 + 카테고리 JOIN 까지 수행.
+  // 친구가 soft-deleted 면 위 getFriendById 가 null 을 반환 — 여기 도달 시점에 친구는 살아 있다.
+  const [entryRows, friendList, categoryList] = await Promise.all([
+    listEntriesByFriend(friend.id),
+    listFriends(),
+    listCategories(),
+  ]);
+  const friendEntries: Entry[] = entryRows.map((r) => ({
+    id: r.id,
+    friend_id: r.friend_id,
+    category_id: r.category_id,
+    memo: r.memo,
+    received_date: String(r.received_date),
+    repayment_timing: r.repayment_timing,
+    repayment_specific_date: r.repayment_specific_date
+      ? String(r.repayment_specific_date)
+      : null,
+    is_repaid: r.is_repaid,
+    created_at:
+      r.created_at instanceof Date
+        ? r.created_at.toISOString()
+        : String(r.created_at),
+    updated_at:
+      r.updated_at instanceof Date
+        ? r.updated_at.toISOString()
+        : String(r.updated_at),
     friend_name: friend.name,
+    category_name: r.category_name,
+    category_icon: r.category_icon,
+    category_color: r.category_color,
   }));
   const entryCount = friendEntries.length;
 
-  // combobox / select 옵션 — worker 가 실제 쿼리로 교체.
-  // V1 골격에서는 listFriends() 가 결합돼 있으면 그대로 쓰고, 실패하거나 비어 있으면 mock 으로 fallback.
-  let friendOptions: ReadonlyArray<{ id: string; name: string }>;
-  try {
-    const rows = await listFriends();
-    friendOptions = rows.length > 0
-      ? rows.map((r) => ({ id: r.id, name: r.name }))
-      : MOCK_FRIENDS_FOR_COMBOBOX;
-  } catch {
-    friendOptions = MOCK_FRIENDS_FOR_COMBOBOX;
-  }
-  let categoryOptions: ReadonlyArray<{
+  const friendOptions: ReadonlyArray<{ id: string; name: string }> =
+    friendList.map((r) => ({ id: r.id, name: r.name }));
+  const categoryOptions: ReadonlyArray<{
     id: string;
     name: string;
     icon: string | null;
     color: string;
-  }>;
-  try {
-    const rows = await listCategories();
-    categoryOptions = rows.length > 0
-      ? rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          icon: r.icon,
-          color: r.color,
-        }))
-      : MOCK_CATEGORIES_FOR_SELECT;
-  } catch {
-    categoryOptions = MOCK_CATEGORIES_FOR_SELECT;
-  }
+  }> = categoryList.map((r) => ({
+    id: r.id,
+    name: r.name,
+    icon: r.icon,
+    color: r.color,
+  }));
 
   const friendForUi = {
     id: friend.id,
@@ -171,6 +180,7 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
               defaultFriendId={friend.id}
               friendOptions={friendOptions}
               categoryOptions={categoryOptions}
+              onSubmitAction={createEntry}
               trigger={
                 <Button
                   variant="outline"
@@ -266,6 +276,8 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
                 /* 친구 상세 페이지에선 친구 아바타 redundant → 기본 false */
                 friendOptions={friendOptions}
                 categoryOptions={categoryOptions}
+                onUpdateAction={updateEntry}
+                onDeleteAction={deleteEntry}
               />
             ))}
           </ul>
@@ -282,8 +294,14 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
               defaultFriendId={friend.id}
               friendOptions={friendOptions}
               categoryOptions={categoryOptions}
+              onSubmitAction={createEntry}
               trigger={
-                <Button variant="outline" size="sm" className="mt-2 gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 gap-1"
+                  aria-label={`${friend.name}한테 받은 신세 추가`}
+                >
                   <Plus aria-hidden />
                   이 친구한테 받은 신세 추가
                 </Button>

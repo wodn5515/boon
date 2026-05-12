@@ -156,6 +156,11 @@ export function FriendCombobox({
         <PopoverPrimitive.Content
           align="start"
           sideOffset={4}
+          // radix-ui Popover 의 기본 role 은 "dialog" — 본 combobox 컨테이너는 진짜 dialog 가 아니라
+          // 자식 listbox 의 시각 컨테이너일 뿐이라 role 을 비워(presentation 으로 덮어) 두면
+          // ARIA 트리에 dialog 가 추가로 생기지 않는다. 이렇게 두지 않으면 EntryFormDialog 와
+          // 함께 `getByRole("dialog")` 가 매칭 2개로 strict-mode 충돌 (E2E 시나리오 1/3/4).
+          role="presentation"
           className={cn(
             "z-50 w-(--radix-popover-trigger-width) min-w-56 overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10",
             "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
