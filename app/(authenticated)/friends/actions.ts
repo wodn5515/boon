@@ -28,9 +28,16 @@ import { getCurrentUser } from "@/lib/auth/user";
 function safeRevalidate(path: string): void {
   try {
     revalidatePath(path);
-  } catch {
+  } catch (e) {
     // 통합 테스트(Next request store 밖) 등 비-요청 컨텍스트에서는 무시.
-    // 실서비스에서는 항상 request store 안에서 호출돼 정상 동작한다.
+    // 005 §I-6 / PR #3 🟢 #5: production 에서는 가시화 로그 — 캐시 무효화 실패가 운영에서
+    // 사일런트 되면 stale UI 회귀가 디버깅 어려움. 로컬·테스트는 그대로 silent.
+    if (process.env.NODE_ENV === "production") {
+      console.warn("[friends/actions] revalidate failed", {
+        path,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 }
 
