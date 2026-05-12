@@ -57,9 +57,15 @@ vi.mock("@/db/client", () => ({
 const USER_A = "00000000-0000-0000-0000-0000000000aa";
 const USER_B = "00000000-0000-0000-0000-0000000000bb";
 
-function actAs(userId: string) {
+/**
+ * 005 §I-2 / §H-5: `setAuthContext` 는 async — drizzle.execute 가 Promise 라
+ * `await` 없이 다음 쿼리를 보내면 GUC/ROLE 이 미설정 상태로 실행될 수 있다.
+ * pglite 4.x 의 query 큐 FIFO 직렬화 덕분에 runtime 은 통과하지만, 의존성을 제거하려
+ * spec 차원에서 `actAs` 를 async 로 명시화하고 호출자들도 모두 `await actAs(...)` 로 갱신.
+ */
+async function actAs(userId: string) {
   currentUserId = userId;
-  setAuthContext(testDb, userId);
+  await setAuthContext(testDb, userId);
 }
 
 beforeAll(async () => {
@@ -82,7 +88,7 @@ afterAll(async () => {
 
 describe("friends Server Action 통합", () => {
   it("[시나리오 10] createFriend 가 user_id 를 자동 주입하고 row 가 들어간다", async () => {
-    actAs(USER_A);
+    await actAs(USER_A);
     const { createFriend } = await import("@/app/(authenticated)/friends/actions");
 
     const fd = new FormData();
@@ -119,7 +125,7 @@ describe("friends Server Action 통합", () => {
       [USER_A, USER_B],
     );
 
-    actAs(USER_A);
+    await actAs(USER_A);
     const { listFriends } = await import("@/lib/friends/queries");
     const list = await listFriends();
 
@@ -134,7 +140,7 @@ describe("friends Server Action 통합", () => {
     );
     const friendId = inserted[0]!.id;
 
-    actAs(USER_A);
+    await actAs(USER_A);
     const { deleteFriend } = await import("@/app/(authenticated)/friends/actions");
     await deleteFriend(friendId);
 
@@ -156,7 +162,7 @@ describe("friends Server Action 통합", () => {
     const friendId = inserted[0]!.id;
 
     // USER_A 가 USER_B 의 친구 수정 시도.
-    actAs(USER_A);
+    await actAs(USER_A);
     const { updateFriend } = await import("@/app/(authenticated)/friends/actions");
 
     const fd = new FormData();
