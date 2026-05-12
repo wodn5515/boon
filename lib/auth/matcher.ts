@@ -8,6 +8,7 @@
  *     - `/login`
  *     - `/auth/*` (OAuth callback)
  *     - `/api/auth/*` (signout 등 인증 관련 API)
+ *     - `/api/_test/*` (E2E 전용 reset 등 — production 은 라우트 자체가 403, 006 §J Lead 결정)
  *     - `/_next/*` (Next.js 정적 자산 / 이미지 최적화)
  *     - `/favicon.ico`, `/robots.txt` 등 확장자 보유 정적 자원
  *   보호 (인증 체크 필요):
@@ -22,6 +23,8 @@ export function shouldProtect(pathname: string): boolean {
   if (pathname.startsWith("/_next/")) return false;
   if (pathname.startsWith("/auth/")) return false;
   if (pathname.startsWith("/api/auth/")) return false;
+  // /api/_test/* — E2E 인프라 reset 라우트만. production 가드는 route handler 가 책임.
+  if (pathname.startsWith("/api/_test/")) return false;
 
   // 확장자가 붙은 정적 파일 (e.g. /robots.txt, /sitemap.xml, /og.png)
   if (/\.[a-zA-Z0-9]+$/.test(pathname)) return false;
