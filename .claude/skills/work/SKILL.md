@@ -116,7 +116,7 @@ test-writer가 spec과 실패 로그를 보고하면 **Lead가 자율적으로 �
 - 시나리오 수정이 필요하면 test-writer를 재호출해 spec 갱신 → 결정 로그에 수정 사유 기록
 - spec이 너무 강하면 약화, 너무 약하면 강화 — 모두 Lead 판단
 
-결정 로그는 `docs/decisions/<NNN>-<slug>.md`로 그 작업 워크트리에 추가한다 ([`CLAUDE.md`](../../../CLAUDE.md) §11 참고).
+결정 로그는 `docs/decisions/<NNN>-<slug>.md`로 그 작업 워크트리에 추가한다 ([`CLAUDE.md`](../../../CLAUDE.md) §12 참고).
 
 ### 3단계 팀 spawn 시 worker 프롬프트에 포함할 사항 (TDD 게이트를 통과한 경우)
 
@@ -234,4 +234,4 @@ ls docs/decisions/ | grep -E '^[0-9]+-' | sort | tail -1
 ### 사용자 개입 처리
 사용자가 결정에 대해 직접 의견을 주면(예: "그렇게 말고 X로 해줘") 결정 파일에 "## 사용자 개입 (<YYYY-MM-DD>)" 섹션을 append하고 사용자 지시·변경된 결정을 기록한다. 기존 "결정"을 통째로 덮어쓰지 않는다.
 
-자세한 템플릿: [`CLAUDE.md`](../../../CLAUDE.md) §11.
+자세한 템플릿: [`CLAUDE.md`](../../../CLAUDE.md) §12.

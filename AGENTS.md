@@ -32,7 +32,7 @@ Boon의 협업 모델은 **사용자 승인 게이트가 없다**. 작업 중 �
 ### 2-2. 결정 로그 작성 의무
 - 비자명한 결정이 생긴 **그 작업의 커밋 안에** `docs/decisions/<NNN>-<slug>.md`를 추가한다 (별도 PR 금지)
 - 다음 NNN은 `ls docs/decisions/ | grep -E '^[0-9]+-' | sort | tail -1` 로 확인 후 +1
-- 템플릿: 배경 / 결정 / 근거 / 거절된 대안 / 후속 영향 (자세한 형식은 [`CLAUDE.md`](./CLAUDE.md) §11)
+- 템플릿: 배경 / 결정 / 근거 / 거절된 대안 / 후속 영향 (자세한 형식은 [`CLAUDE.md`](./CLAUDE.md) §12)
 - PR 본문에 "관련 결정 로그: `docs/decisions/<NNN>-<slug>.md`" 한 줄로 링크
 
 ### 2-3. 기록할 결정의 예
@@ -242,11 +242,30 @@ Agent({
 - 작업 완료 시 npm test 통과 확인 → lint·sfx에 SendMessage로 peer 검증 요청
 ```
 
-## 6. 슬래시 스킬 목록
+## 6. 슬래시 스킬 목록 + 워크플로우 분기
+
+### 6-1. 작업 성격에 따른 스킬 선택
+
+작업 시작 시 Lead가 자율 판단으로 둘 중 하나 선택:
+
+| 작업 성격 | 스킬 | 이유 |
+|---|---|---|
+| 사용자 가시 기능·라우트·UI 동작 변경 | **`/work`** | TDD 게이트 + 팀(worker·lint·sfx) + peer 검증 필요 |
+| 데이터 모델·마이그레이션·서버 액션·DB 쿼리 | **`/work`** | 통합 테스트로 검증 필요 |
+| 문서(README·CLAUDE·AGENTS·docs/**), 결정 로그 추가 | **`/meta`** | 사용자 가시 동작 영향 없음 |
+| `.claude/` 에이전트·스킬·훅·settings 수정 | **`/meta`** | 운영 도구 변경 |
+| `.gitignore`, dev 도구 설정(tsconfig·eslint·prettier), CI 워크플로우 | **`/meta`** | 인프라성 변경 |
+| 의존성 추가/제거 자체만 (구현 결합 없음) | **`/meta`** | 결합되는 구현은 후속 `/work`로 |
+| 긴급 수정 (`main` 베이스) | **`/hotfix`** | stage 우회 |
+
+판단 기준 한 줄: **"이 변경이 사용자가 보는 화면·동작·데이터를 바꾸는가"** — 그러면 `/work`, 아니면 `/meta`. 애매하면 `/work`가 안전.
+
+### 6-2. 전체 스킬
 
 | 스킬 | 시점 | 용도 |
 |---|---|---|
-| [`/work`](./.claude/skills/work/SKILL.md) | 새 기능 시작 | 워크트리 + TDD 게이트 + 팀 세팅 |
+| [`/work`](./.claude/skills/work/SKILL.md) | 새 기능·코드 작업 시작 | 워크트리 + 디자이너·TDD 게이트 + 팀 세팅 |
+| [`/meta`](./.claude/skills/meta/SKILL.md) | 메타 작업(문서·설정·.claude) | 워크트리 + PR (게이트·팀·peer 검증 생략, Lead 단독) |
 | [`/hotfix`](./.claude/skills/hotfix/SKILL.md) | 긴급 수정 | `main` 베이스 워크트리 |
 | [`/pr`](./.claude/skills/pr/SKILL.md) | 구현 완료 후 | PR 생성 (템플릿 적용) |
 | [`/review`](./.claude/skills/review/SKILL.md) | PR 리뷰 시 | reviewer가 GitHub 코멘트 |

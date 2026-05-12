@@ -140,7 +140,21 @@ PRD §4 기준 4개 엔티티: `users` / `friends` / `categories` / `entries`.
 | 통합 (API route, DB 인접) | Vitest | `tests/integration/**/*.test.ts` |
 | E2E (사용자 흐름) | Playwright | `e2e/tests/**/*.spec.ts` |
 
-## 9. 브랜치 & 워크트리 전략
+## 9. 워크플로우 분기 (코드 vs 메타)
+
+작업 성격에 따라 두 흐름 중 하나로 진입한다:
+
+| 변경 대상 | 스킬 | 흐름 |
+|---|---|---|
+| `app/**`, `components/**`, `lib/**`, `db/**`, 마이그레이션, drizzle 스키마 | **`/work`** | 워크트리 → 디자이너·TDD 게이트 → 팀 spawn → peer 검증 → PR |
+| `README.md`, `CLAUDE.md`, `AGENTS.md`, `docs/**`, `.claude/**`, `.gitignore`, dev 도구 설정, CI 워크플로우 | **`/meta`** | 워크트리 → Lead 단독 작업 → PR (게이트·팀·peer 검증 생략) |
+| 긴급 수정 (`main` 베이스) | **`/hotfix`** | stage 우회 |
+
+판단 기준: **"이 변경이 사용자가 보는 화면·동작·데이터를 바꾸는가"** — 바꾸면 `/work`, 안 바꾸면 `/meta`. 애매하면 `/work`가 안전.
+
+자세한 분기 표는 [`AGENTS.md`](./AGENTS.md) §6.
+
+## 10. 브랜치 & 워크트리 전략
 
 | 패턴 | 베이스 | 머지 대상 |
 |---|---|---|
@@ -154,7 +168,7 @@ PRD §4 기준 4개 엔티티: `users` / `friends` / `categories` / `entries`.
 - `git reset --hard`, `git merge` 직접 수행 금지
 - PR 머지는 **사용자만** 수행
 
-## 10. 환경 변수
+## 11. 환경 변수
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
@@ -169,11 +183,11 @@ Supabase 콘솔에서 별도 설정:
 - Google Cloud Console에서 OAuth Client ID/Secret 발급 → Supabase 입력
 - Redirect URL: `https://<your-app>.vercel.app/auth/callback`
 
-## 11. 결정 로그 (decisions log) 운영
+## 12. 결정 로그 (decisions log) 운영
 
 작업 중 발생하는 모든 비자명한 판단은 **Lead 에이전트가 자율적으로 결정**하고, 그 즉시 `docs/decisions/<NNN>-<slug>.md`로 기록한다. 사용자에게 매번 물어 승인을 받는 흐름이 아니다 — Lead는 PRD·결정 로그·CLAUDE.md를 근거로 스스로 판단할 권한과 책임을 동시에 가진다.
 
-### 11-1. 무엇을 기록하는가
+### 12-1. 무엇을 기록하는가
 - **TDD 게이트에서 작성한 spec 시나리오** — 어떤 사용자 흐름을, 어떤 검증 포인트로 잡았는지
 - **spec 약화/강화 판단** — worker가 통과시키기 어렵다고 보고했을 때 Lead가 spec 수정 결정을 내린 경우
 - **디자이너 호출 여부와 그 결과** — 어떤 컴포넌트 골격을 어떤 톤으로 잡았는지
@@ -185,7 +199,7 @@ Supabase 콘솔에서 별도 설정:
 - PRD/이전 결정 로그에 이미 명시된 사항을 단순 적용한 경우
 - 코드 변경의 무엇/어떻게 (git diff와 PR 본문이 충분히 표현)
 
-### 11-2. 파일 형식
+### 12-2. 파일 형식
 
 ```
 docs/decisions/
@@ -220,7 +234,7 @@ docs/decisions/
 <이 결정이 영향을 미치는 다른 영역 / V2 이후 재논의 필요성>
 ```
 
-### 11-3. 사용자가 끼어들 때
+### 12-3. 사용자가 끼어들 때
 
 사용자가 결정에 대해 직접 의견을 주면(예: "그렇게 말고 X로 해줘") 해당 결정 파일에 다음을 append한다:
 
@@ -232,10 +246,10 @@ docs/decisions/
 
 기존 "결정"을 통째로 덮어쓰지 않고 이력을 남긴다.
 
-### 11-4. 작성 시점
+### 12-4. 작성 시점
 결정이 발생한 **그 작업의 워크트리에서 그 작업의 커밋으로** 포함시킨다. 별도 PR로 분리하지 않는다. PR 본문에는 "관련 결정 로그: `docs/decisions/<NNN>-<slug>.md`" 한 줄로 링크.
 
-## 12. 금지 사항 (요약)
+## 13. 금지 사항 (요약)
 
 - `main` / `stage` 직접 push
 - force push, `git reset --hard`, `git merge` 직접 수행
@@ -249,7 +263,7 @@ docs/decisions/
 - **비자명한 결정을 내리고도 `docs/decisions/<NNN>-<slug>.md`를 남기지 않음**
 - **사용자 가시 기능·스택·사이트맵·데이터 모델이 바뀌었는데 `README.md` 미동기화**
 
-## 13. 참고 문서
+## 14. 참고 문서
 
 - [`README.md`](./README.md) — 서비스 소개
 - [`docs/PRD.md`](./docs/PRD.md) — 제품 스펙 (V1 범위, 데이터 모델, UX, DoD)
