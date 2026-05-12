@@ -89,7 +89,7 @@ PRD §3 친구 관리(목록·상세·CRUD)를 V1 본격 도메인 첫 슬라이
    - `connect-src 'self' https://*.supabase.co`
    - `frame-ancestors 'none'`
 5. **`users.email`/`google_id` unique 제약**: `db/migrations/0003_users_unique.sql` 추가 — `ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);` (google_id는 NULL 허용이라 partial index: `CREATE UNIQUE INDEX users_google_id_unique ON users (google_id) WHERE google_id IS NOT NULL;`)
-6. **dynamic import 환원**: `app/auth/callback/route.ts`의 `await import("@/db/client")` / `import("@/db/schema/users")`를 static import로 환원. pglite + `vi.mocked()` 패턴으로 mock 호환 검증. 통합 테스트 인프라가 pglite로 가니 vi.mock factory hoisting 한계 회피.
+6. **dynamic import 환원** → **worker 작업 중 환원 불가 판명, 유지 결정으로 변경** (Lead 응대 라운드 §1 참고). 환원은 별도 슬라이스로 deferred.
 7. **AuthError type import**: `app/auth/callback/route.ts`의 `(error as { code?: string } | null | undefined)?.code` 캐스트 → `import type { AuthError } from "@supabase/supabase-js"`로 한 줄 정리.
 8. **pglite 헬퍼** → §H에서 처리
 
@@ -138,3 +138,32 @@ PRD §3 친구 관리(목록·상세·CRUD)를 V1 본격 도메인 첫 슬라이
 - 친구 복구 UI (휴지통)
 - 데스크톱 좌측 사이드바 네비 (위젯 수 증가 시)
 - 단일 친구 카드 onhover 트랜지션
+
+---
+
+## Lead 응대 라운드 (worker 보고 응대, 2026-05-12)
+
+worker가 인프라 부채 §J 항목 적용 중 spec 충돌 2건 보고. Lead 자율 판단 결과 반영.
+
+### §1. §J-6 dynamic import 환원 → 유지로 변경 (불가 판명)
+
+**worker 보고**: `app/auth/callback/route.ts`의 `await import("@/db/client")` / `await import("@/db/schema/users")`를 static import로 환원하면 `tests/integration/auth/callback-route.test.ts`의 `vi.mock("@/db/client", () => ({ db: { insert: dbInsert } }))` 패턴이 TDZ 에러로 깨짐 (`Cannot access 'dbInsert' before initialization`). 깨끗하게 환원하려면 `db/client.ts`에 lazy factory(`getDb()`) 도입이 전제 — callback handler 외 모든 호출처(queries, Server Action 등)도 같이 손대야 함.
+
+**결정**: 이번 슬라이스에서 dynamic import 그대로 **유지**. 환원 시도 비용 > 청산 가치 (route 한 곳만 dynamic이고 성능 영향 사실상 0). worker는 route.ts의 "Lead 보류" 같은 임시 주석 없이 깨끗한 dynamic import 유지.
+
+**deferred (이번 슬라이스 외)**:
+- `db/client.ts`에 lazy factory(`getDb()`) 패턴 도입 시 환원 — 별도 `/work` 슬라이스. 트리거 시점: callback handler 외 다른 곳에서도 통합 테스트가 db/client mock을 필요로 할 때, 또는 V2.
+
+### §2. §G 테스트 typecheck 인프라 — PR #2 spec 한 줄 cast 정리
+
+**worker 보고**: §G 셋업 후 `npm run typecheck:tests`가 `tests/integration/auth/callback-route.test.ts:102`의 `insertValues.mock.calls[0]?.[0] as Record<string, unknown>` 캐스트에서 TS2352/TS2493 에러. 사용자 PR #2 종합 리뷰 🟡 #1이 정확히 짚은 패턴. runtime은 48/48 통과 중이라 동작 이상 없음.
+
+**결정**: test-writer 단발 재호출로 spec 한 줄만 `vi.fn` 인자 시그니처 명시 패턴으로 정리. 의미·동작 무변. (worker는 spec 수정 권한 없음 — 정책 보호)
+
+**처리**: test-writer 라운드에서 `vi.fn<(values: Record<string, unknown>) => unknown>` 시그니처 적용 (옵션 2). Vitest v4의 제네릭 시그니처가 함수 형태라 worker가 안내한 튜플 형태(`vi.fn<[T], R>`)는 TS2558로 거절됨 — test-writer가 함수 시그니처로 보정. 102~104줄의 후속 접근(`inserted.id`, `inserted.email`)은 그대로 보존되어 다른 줄 영향 0. 커밋 `d95769e`.
+
+**결과**: `npx tsc --noEmit -p tsconfig.test.json` 전체 통과, runtime 48/48 무변. §G 완료.
+
+### §3. 결정 로그 갱신 절차 (worker 위임 금지 확인)
+
+worker가 본 결정 로그를 직접 수정하지 않고 Lead에 보고한 것은 정책 일치. CLAUDE.md §12 "Lead 자율 판단 + 결정 로그 작성 의무"의 트레이스 보존을 유지함. worker는 결정 로그 영역에 손대지 않고 코드·인프라 부채에만 집중. 앞으로도 같은 흐름.
