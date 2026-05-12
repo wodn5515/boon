@@ -39,6 +39,16 @@ async function requireUserId(): Promise<string> {
   return user.id;
 }
 
+/**
+ * LIKE wildcard 문자(`%`, `_`, `\`)를 사용자 입력에서 escape 한다.
+ * drizzle 의 파라미터 바인딩은 SQL injection 으로부터 보호하지만, 와일드카드는 LIKE 의미상
+ * 그대로 해석돼 "검색어로 `%` 입력 시 모든 친구 매칭" 같은 UX 의도와 다른 동작을 유발한다.
+ * (sfx 라운드 1 🟢 #8)
+ */
+function escapeLike(input: string): string {
+  return input.replace(/[\\%_]/g, "\\$&");
+}
+
 export async function listFriends(params: ListFriendsParams = {}): Promise<Friend[]> {
   if (isE2EBypassEnabled()) {
     const { e2eListFriends } = await import("./e2e-store");
@@ -50,7 +60,9 @@ export async function listFriends(params: ListFriendsParams = {}): Promise<Frien
     eq(friends.user_id, userId),
     eq(friends.is_deleted, false),
   );
-  const where = q ? and(baseWhere, ilike(friends.name, `%${q}%`)) : baseWhere;
+  const where = q
+    ? and(baseWhere, ilike(friends.name, `%${escapeLike(q)}%`))
+    : baseWhere;
 
   return await db
     .select()
