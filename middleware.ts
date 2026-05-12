@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { bypassUserIfPresent, isE2EBypassEnabled } from "@/lib/auth/bypass";
 import { shouldProtect } from "@/lib/auth/matcher";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 
 /**
  * Boon 인증 게이트.
@@ -31,11 +32,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // 실제 세션 검증.
+  // 실제 세션 검증. 결정 로그 004 §J-2: `requireEnv` 로 production 누락 시 즉시 throw.
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "placeholder-anon-key",
+    getSupabaseUrl(),
+    getSupabaseAnonKey(),
     {
       cookies: {
         getAll() {

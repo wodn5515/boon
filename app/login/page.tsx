@@ -30,12 +30,20 @@ export const metadata: Metadata = {
   description: "Google 계정으로 Boon에 로그인합니다.",
 };
 
+// 결정 로그 004 §J-3: callback exchange 실패를 SDK 응답에 맞춰 invalid_grant / expired_code /
+// network_error 로 세분화 — 사용자가 다음 행동을 결정하기 쉽도록 카피 분리.
 const ERROR_COPY: Record<string, string> = {
   missing_code: "OAuth 응답에서 인증 코드를 찾지 못했어요. 다시 시도해 주세요.",
   exchange_failed: "세션을 만드는 중 문제가 발생했어요. 다시 시도해 주세요.",
+  invalid_grant: "로그인 정보가 유효하지 않아요. Google 로그인을 처음부터 다시 시도해 주세요.",
+  expired_code: "로그인 링크가 만료됐어요. Google 로그인을 다시 눌러 주세요.",
+  network_error: "Google 서버와 통신하는 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
   oauth_init: "Google 로그인 시작에 실패했어요. 잠시 후 다시 시도해 주세요.",
   missing_email: "Google 계정의 이메일을 받아오지 못했어요. 권한을 허용했는지 확인해 주세요.",
   unsupported_provider: "현재는 Google 로그인만 지원해요.",
+  account_conflict:
+    "이 이메일로 이미 다른 계정이 연결되어 있어요. 기존 계정으로 로그인해 주세요.",
+  upsert_failed: "계정 정보를 저장하는 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
 };
 
 type LoginPageProps = {
