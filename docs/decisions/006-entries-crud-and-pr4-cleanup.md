@@ -130,6 +130,18 @@ PRD §3 신세(entries) 관리 본격 도입 — Boon의 V1 최종 도메인 ent
    - handleSubmit의 `formData.set("color", color)` 만 source of truth
 6. **💬 #6 signOut 트레이드오프 결정 로그 명시**: 본 §J-1에 포함
 
+### §J-7 (라운드 중 추가 발견 — 사용자 운영 원칙 적용)
+worker가 §J-2 (CategoryItem isFirst/isLast 그룹 경계) 구현 후 spec 시나리오 7이 시리얼 실행에서 깨지는 현상 보고. 원인: `lib/categories/e2e-store.ts`·`lib/friends/e2e-store.ts`·`lib/entries/e2e-store.ts`의 in-memory Map이 test 간 상태를 누수 (각 spec이 이전 spec의 잔여 row 위에서 시작).
+
+**Lead 자율 판단**: 옵션 1 채택 — 다음 슬라이스로 미루지 않고 본 PR에서 청산. 005 사용자 평가("부채 청산 ↔ 새 도메인 통합") 원칙 적용.
+
+**처리**:
+- worker: `app/api/_test/reset/route.ts` 신설 (POST, production + `E2E_BYPASS_AUTH=1` 가드, e2e-store 3종 reset + 시드 재적용) + `middleware.ts`의 `shouldProtect` 매처에 `/api/_test/*` 통과
+- test-writer (커밋 `2ba6905`): `e2e/fixtures/test-with-reset.ts` 신설 — Playwright `test.extend({ page })`로 각 test 시작 전 `/api/_test/reset` POST. settings/friends/entries/friend-entries 4개 spec import 교체 (비로그인 회귀 spec은 그대로)
+- 결과: 시나리오 7 시리얼 누수 자연 해소. 향후 entries-list·dashboard 슬라이스도 격리 인프라 위에서 안정
+
+**거절 대안**: spec 약화 (회귀 방어선 손상), 그대로 + PR 본문 명시 (부채 누적)
+
 ## 근거
 
 - **entries 본격 도입**: V1 핵심 도메인 entity. friends·categories 결합 + 보답 시점 4종 비즈니스 룰 + 인라인 친구 빠른 생성 → V1에서 가장 복잡한 슬라이스. 베이스 인프라(정정-1, pglite, RLS 단독 회귀)가 안정된 PR #4 위에서 자연 진입
