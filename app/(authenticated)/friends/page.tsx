@@ -1,20 +1,12 @@
 import type { Metadata } from "next";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { FriendCard } from "@/components/friends/friend-card";
 import { FriendFormDialog } from "@/components/friends/friend-form-dialog";
+import { FriendsListSearch } from "@/components/friends/friends-list-search";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { MOCK_FRIENDS } from "@/lib/friends/mock";
-import type { Friend } from "@/lib/friends/types";
+import { listFriends } from "@/lib/friends/queries";
 
 export const metadata: Metadata = {
   title: "친구 목록 · Boon",
@@ -24,19 +16,36 @@ export const metadata: Metadata = {
 /**
  * `/friends` — 친구 목록 (PRD §3, §5).
  *
- * Server Component. middleware 가 이미 인증 게이트를 통과시켰다고 가정한다
- * (결정 로그 003 §C).
+ * Server Component. middleware 가 이미 인증 게이트를 통과시켰다고 가정한다 (003 §C).
  *
- * V1 UI 골격:
- * - 검색 input, 정렬 select 는 디자인만 — 실제 필터·정렬은 worker 가 결합.
- * - 데이터는 `MOCK_FRIENDS` 에서 가져오며, worker 가 drizzle 쿼리로 교체한다.
- * - 카드 그리드는 mobile 1열 / sm(≥640) 2열 / lg(≥1024) 3열.
- * - 친구가 0명이면 베이지 톤 빈 상태 카드 + "친구 추가" CTA.
+ * 결정 로그 004 §A·§D:
+ *   - 데이터는 `listFriends()` drizzle 쿼리. RLS 가 본인 user_id 만 통과시킨다.
+ *   - 검색은 URL searchParams 기반 (`/friends?q=...`). RSC 친화 + 공유 가능 URL.
+ *   - 정렬은 V1 골격에서 이름 오름차순 고정. 디자이너 placeholder 였던 정렬 Select 는
+ *     혼동을 줄이기 위해 일단 제거 (entry_count 가 entries 슬라이스 전까지 0 으로 고정이라
+ *     "받은 신세 수" 정렬이 의미 없는 상태). 04+ entries 슬라이스에서 다시 검토.
  */
-export default async function FriendsPage() {
-  // [placeholder] worker 가 결합:
-  //   const friends = await db.query.friends.findMany({ ... with RLS user_id 필터 })
-  const friends: Friend[] = MOCK_FRIENDS;
+
+type FriendsPageProps = {
+  // Next.js 15: searchParams 는 Promise.
+  searchParams: Promise<{ q?: string | string[] }>;
+};
+
+export default async function FriendsPage({ searchParams }: FriendsPageProps) {
+  const params = await searchParams;
+  const rawQ = Array.isArray(params.q) ? params.q[0] : params.q;
+  const q = typeof rawQ === "string" ? rawQ.trim() : undefined;
+
+  const rows = await listFriends({ q: q && q.length > 0 ? q : undefined });
+  // entries 슬라이스 전까지 entry_count 는 0 placeholder (Friend UI 도메인 타입).
+  const friends = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    birthday_month: row.birthday_month,
+    birthday_day: row.birthday_day,
+    note: row.note,
+    entry_count: 0,
+  }));
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
@@ -61,41 +70,19 @@ export default async function FriendsPage() {
         />
       </div>
 
-      {/* 검색 + 정렬 */}
-      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          {/* [placeholder] worker 가 검색 결합 — 현재는 디자인만. */}
-          <Input
-            type="search"
-            placeholder="이름으로 검색"
-            aria-label="친구 이름 검색"
-            className="pl-9"
-          />
-        </div>
-        {/* [placeholder] worker 가 정렬 결합. */}
-        <Select defaultValue="name">
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="정렬" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="name">이름순</SelectItem>
-            <SelectItem value="entry_count">받은 신세 수</SelectItem>
-            <SelectItem value="recent">최근 활동</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* 검색 — 즉시 클라이언트 필터 + Enter 시 ?q=... 로 URL 동기화 (004 §D). */}
+      <FriendsListSearch initialQuery={q ?? ""} targetListId="friends-grid" />
 
       {/* 카드 그리드 또는 빈 상태 */}
       {friends.length === 0 ? (
-        <EmptyFriends />
+        <EmptyFriends searched={Boolean(q)} />
       ) : (
-        <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul
+          id="friends-grid"
+          className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
           {friends.map((friend) => (
-            <li key={friend.id}>
+            <li key={friend.id} data-friend-name={friend.name}>
               <FriendCard friend={friend} />
             </li>
           ))}
@@ -106,11 +93,21 @@ export default async function FriendsPage() {
 }
 
 /**
- * 빈 상태 카드 — 베이지 톤 + 부드러운 안내문.
- * "부채 트래커가 아니라 회상 노트" (CLAUDE.md §2) 톤을 유지하기 위해
- * 강제·의무 카피를 피한다.
+ * 빈 상태 카드 — 베이지 톤 + 부드러운 안내문 (CLAUDE.md §2 강박 톤 회피).
  */
-function EmptyFriends() {
+function EmptyFriends({ searched }: { searched: boolean }) {
+  if (searched) {
+    return (
+      <Card className="mt-8 items-center gap-2 bg-accent/40 py-10 text-center">
+        <p className="font-heading text-lg font-medium text-foreground">
+          검색 결과가 없어요
+        </p>
+        <p className="max-w-md text-sm text-muted-foreground">
+          다른 이름으로 검색하거나, 친구를 새로 추가해 보세요.
+        </p>
+      </Card>
+    );
+  }
   return (
     <Card className="mt-8 items-center gap-4 bg-accent/40 py-10 text-center">
       <p className="font-heading text-lg font-medium text-foreground">

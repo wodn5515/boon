@@ -8,7 +8,8 @@ import { FriendFormDialog } from "@/components/friends/friend-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InitialAvatar } from "@/components/ui/initial-avatar";
-import { getMockFriendById } from "@/lib/friends/mock";
+import { birthdayCountdownLabel } from "@/lib/friends/birthday";
+import { getFriendById } from "@/lib/friends/queries";
 import { formatBirthday } from "@/lib/friends/types";
 
 type FriendDetailPageProps = {
@@ -20,7 +21,7 @@ export async function generateMetadata({
   params,
 }: FriendDetailPageProps): Promise<Metadata> {
   const { id } = await params;
-  const friend = getMockFriendById(id);
+  const friend = await getFriendById(id);
   return {
     title: friend ? `${friend.name} · Boon` : "친구 · Boon",
   };
@@ -29,27 +30,39 @@ export async function generateMetadata({
 /**
  * `/friends/[id]` — 친구 상세 (PRD §3, §5).
  *
- * V1 UI 골격. worker 가 결합할 placeholder:
- *   - 친구 데이터: `getMockFriendById` → drizzle 쿼리
- *   - 생일 D-N 카운트다운: 현재는 정적 텍스트
- *   - 통계 카드: entries 슬라이스의 집계 함수로 교체
- *   - 받은 신세 타임라인: entries 슬라이스의 entry 리스트로 교체
+ * 결정 로그 004 §A·§C:
+ *   - 데이터는 `getFriendById()` drizzle 쿼리. RLS 가 본인 친구만 통과 — 다른 사용자
+ *     친구를 URL 로 찔러 들어와도 null 이라 404.
+ *   - soft-deleted 친구는 쿼리에서 자동 제외 (is_deleted=false 필터) — 삭제 직후 redirect 와 정합.
  *
- * 친구가 없으면 404. mock 단계에서도 동적 라우트의 404 흐름을 검증한다.
+ * entries 슬라이스 전까지 placeholder:
+ *   - 통계 카드: entries 슬라이스에서 집계
+ *   - 받은 신세 타임라인: entries 슬라이스에서 결합
+ *   - entry_count: 0 고정 (UI 컴포넌트 호환).
  */
 export default async function FriendDetailPage({ params }: FriendDetailPageProps) {
   const { id } = await params;
-  const friend = getMockFriendById(id);
+  const friend = await getFriendById(id);
 
   if (!friend) {
     notFound();
   }
 
   const birthday = formatBirthday(friend);
-  // [placeholder] worker: 오늘 기준 다음 생일까지 일수 계산.
-  const birthdayCountdown = birthday ? "D-?" : null;
-  // [placeholder] worker: entries 슬라이스에서 결합.
-  const entryCount = friend.entry_count;
+  const birthdayCountdown = birthdayCountdownLabel(
+    friend.birthday_month,
+    friend.birthday_day,
+  );
+  // entries 슬라이스 결합 전까지 0 placeholder. friend-form-dialog / delete-dialog 가 entry_count 를 받는다.
+  const entryCount = 0;
+  const friendForUi = {
+    id: friend.id,
+    name: friend.name,
+    birthday_month: friend.birthday_month,
+    birthday_day: friend.birthday_day,
+    note: friend.note,
+    entry_count: entryCount,
+  };
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
@@ -99,7 +112,7 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
           <div className="flex shrink-0 gap-1">
             <FriendFormDialog
               mode="edit"
-              friend={friend}
+              friend={friendForUi}
               trigger={
                 <Button variant="ghost" size="icon-sm" aria-label="친구 정보 수정">
                   <Pencil aria-hidden />
@@ -107,7 +120,7 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
               }
             />
             <FriendDeleteDialog
-              friend={friend}
+              friend={friendForUi}
               entryCount={entryCount}
               trigger={
                 <Button
@@ -124,7 +137,7 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
         </div>
       </Card>
 
-      {/* 통계 카드 (placeholder) */}
+      {/* 통계 카드 (placeholder — entries 슬라이스 결합) */}
       <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card size="sm" className="px-3">
           <CardHeader className="px-0">
@@ -149,7 +162,6 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
             </CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            {/* [placeholder] worker: entries 슬라이스 + Recharts(shadcn charts) 결합. */}
             <p className="py-4 text-center text-xs text-muted-foreground">
               차트는 신세가 한 개 이상 쌓이면 보여드려요.
             </p>
@@ -162,7 +174,6 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
         <h2 className="font-heading text-lg font-medium text-foreground">
           받은 신세 타임라인
         </h2>
-        {/* [placeholder] worker: entries 슬라이스의 EntryList 컴포넌트로 교체. */}
         <Card size="sm" className="mt-3 items-center gap-2 bg-accent/30 py-8 text-center">
           <p className="text-sm text-foreground">받은 신세가 아직 없어요</p>
           <p className="text-xs text-muted-foreground">

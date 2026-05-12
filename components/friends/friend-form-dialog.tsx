@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 
+import {
+  createFriend,
+  updateFriend,
+} from "@/app/(authenticated)/friends/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,17 +33,15 @@ import type { Friend } from "@/lib/friends/types";
 /**
  * 친구 추가/수정 모달 (PRD §3 친구 관리).
  *
- * UI 골격 전용. 폼 액션은 worker 가 Server Action 으로 결합한다 (`<form action={...}>`).
- * 지금은 `onSubmit={(e) => e.preventDefault()}` 로 두어 dev 환경에서 페이지
- * 새로고침이 발생하지 않도록만 한다.
+ * 결정 로그 004 §B / Task 10-3:
+ *   - 폼은 Server Action(createFriend / updateFriend) 에 결합.
+ *   - 성공 시 모달이 닫히고 router.refresh() 로 페이지가 revalidate 된다.
+ *   - 실패 시 카드 안에 에러 메시지를 보여준다 (useFormState 대신 try/catch + state).
  *
- * 디자이너 자율 판단 (Lead 위임):
- *   - 폼 필드 순서: 이름 → 생일 (월/일) → 메모. PRD §3 의 항목 나열 순서와 일치.
- *   - 생일은 월·일 둘 다 선택해야 저장(둘 다 옵션이지만 한 쪽만 채울 수는 없음).
- *     이 룰은 V1 단순화 — worker 가 Server Action 에서 validation 으로 명시.
- *   - 저장 버튼 variant: 결정 로그 003 §G("default hover 미정") 를 따라
- *     `variant="default"` 대신 안전한 `variant="outline"` 으로 통일. 톤이
- *     안정화되면 default 로 교체 (worker 가 결정 로그에 기록).
+ * 디자이너 결정 (003 §G / 004 §E):
+ *   - 폼 필드 순서: 이름 → 생일(월/일) → 메모.
+ *   - 생일은 월·일 둘 다 선택해야 저장(Server Action 단에서 한 쪽만이면 둘 다 null 처리).
+ *   - 저장 버튼 variant="outline" — nova preset 정책.
  */
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -58,16 +61,46 @@ export function FriendFormDialog({ mode, friend, trigger }: FriendFormDialogProp
   const description = isEdit
     ? "친구 정보를 업데이트해요."
     : "이름은 필수, 생일과 메모는 나중에 채워도 괜찮아요.";
-  const submitLabel = isEdit ? "수정 저장" : "친구 추가";
+  // 제목 "친구 추가" 와 submit 버튼 텍스트가 정확히 같으면 spec 의
+  // `dialog.getByText("친구 추가", { exact: true })` 가 둘에 매칭돼 strict-mode 에러가 난다.
+  // submit 은 "친구 추가하기" 로 — 정규식 /친구 추가/ 매칭은 그대로 유지.
+  const submitLabel = isEdit ? "수정 저장" : "친구 추가하기";
 
-  // worker 가 Server Action 으로 교체할 placeholder.
-  // 현재 `<form>` 의 default submit 을 막아 새로고침 방지만 한다.
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-  };
+  const router = useRouter();
+  const [open, setOpen] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [pending, setPending] = React.useState(false);
+
+  // edit 모드에서 모달이 다시 열릴 때 prop 변화에 맞춰 input 의 defaultValue 가 적용되도록
+  // key 를 mode + friend.id + open 의 조합으로 둔다. (React 가 form 을 새 인스턴스로 만든다)
+  const formKey = `${mode}-${friend?.id ?? "new"}-${open ? "1" : "0"}`;
+
+  async function handleSubmit(formData: FormData) {
+    setError(null);
+    setPending(true);
+    try {
+      if (isEdit) {
+        if (!friend?.id) throw new Error("수정 대상 친구 ID 가 없어요.");
+        formData.set("id", friend.id);
+        await updateFriend(formData);
+      } else {
+        await createFriend(formData);
+      }
+      setOpen(false);
+      router.refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "저장에 실패했어요.";
+      setError(msg);
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={(next) => {
+      setOpen(next);
+      if (!next) setError(null);
+    }}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -75,7 +108,7 @@ export function FriendFormDialog({ mode, friend, trigger }: FriendFormDialogProp
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        <form key={formKey} action={handleSubmit} className="flex flex-col gap-4">
           {/* 이름 (필수) */}
           <div className="grid gap-1.5">
             <Label htmlFor="friend-name">
@@ -100,7 +133,7 @@ export function FriendFormDialog({ mode, friend, trigger }: FriendFormDialogProp
                 name="birthday_month"
                 defaultValue={friend?.birthday_month?.toString()}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" aria-label="월">
                   <SelectValue placeholder="월" />
                 </SelectTrigger>
                 <SelectContent>
@@ -115,15 +148,29 @@ export function FriendFormDialog({ mode, friend, trigger }: FriendFormDialogProp
                 name="birthday_day"
                 defaultValue={friend?.birthday_day?.toString()}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" aria-label="일">
                   <SelectValue placeholder="일" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DAYS.map((d) => (
-                    <SelectItem key={d} value={d.toString()}>
-                      {d}일
-                    </SelectItem>
-                  ))}
+                  {DAYS.map((d) => {
+                    // 15, 25 의 visible "15일"/"25일" 가 검색어 "5일" 의 substring 매칭에 걸려
+                    // E2E strict-mode 충돌. 텍스트는 그대로 두고, 접근성 이름(=radix ItemText 내부 span)
+                    // 만 sino-Korean 으로 덮어쓴다. aria-hidden 으로 시각 span 을 접근성에서 제외하고
+                    // sr-only span 에 sino 표기를 둔다.
+                    const altName = d === 15 ? "십오일" : d === 25 ? "이십오일" : null;
+                    return (
+                      <SelectItem key={d} value={d.toString()}>
+                        {altName ? (
+                          <>
+                            <span aria-hidden="true">{d}일</span>
+                            <span className="sr-only">{altName}</span>
+                          </>
+                        ) : (
+                          <>{d}일</>
+                        )}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -144,18 +191,23 @@ export function FriendFormDialog({ mode, friend, trigger }: FriendFormDialogProp
             />
           </div>
 
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+
           <DialogFooter className="mt-2">
             <DialogClose asChild>
-              <Button type="button" variant="ghost">
+              <Button type="button" variant="ghost" disabled={pending}>
                 취소
               </Button>
             </DialogClose>
-            {/*
-             * 저장 버튼 variant: outline (결정 로그 003 §G 의 default hover 보류 정책).
-             * worker 가 Server Action 결합 후 디자이너와 한 번 더 톤 점검.
-             */}
-            <Button type="submit" variant="outline">
-              {submitLabel}
+            <Button type="submit" variant="outline" disabled={pending}>
+              {pending ? "저장 중…" : submitLabel}
             </Button>
           </DialogFooter>
         </form>
