@@ -1,13 +1,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
+import { sql } from "drizzle-orm";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 
 import * as schema from "@/db/schema";
 
 /**
- * 통합 테스트용 in-memory Postgres (결정 로그 004 §H·§I).
+ * 통합 테스트용 in-memory Postgres (결정 로그 004 §H·§I + 005 §I).
  *
  * - pglite 인스턴스 위에 drizzle 마이그레이션(`db/migrations/*.sql`)을 순서대로 적용한다.
  * - Supabase 의 `auth.uid()` 함수를 pglite 에서 polyfill — RLS 정책이 동일 패턴으로 통과.
@@ -22,10 +24,16 @@ import * as schema from "@/db/schema";
  *
  * 단위:
  *   - `createTestDb()` → `{ db, pg, cleanup }`
- *   - `setAuthContext(testDb, userId)` → 본인 user 로 행세하는 RLS 컨텍스트 주입
+ *   - `setAuthContext(testDb, userId)` (async) — `SET ROLE authenticated` + GUC `sub` 주입
+ *   - `resetAuthContext(testDb)` (async) — 다음 테스트로 누수 방지 (RESET ROLE + GUC clear)
+ *   - `asServiceRole(testDb, fn)` — RLS 우회 시드/cleanup 용
  *
- * 마이그레이션 순서 = 파일명 알파벳 (0000_init.sql → 0001_friends.sql → 0002_rls.sql → 0003_users_unique.sql).
- * drizzle-kit 의 `meta/_journal.json` 은 무시한다 — 본 슬라이스에서 0002/0003 은 수기 SQL 이라 journal 에 없음.
+ * 마이그레이션 순서 = 파일명 알파벳 (0000_init.sql → 0001_friends.sql → 0002_rls.sql
+ *   → 0003_users_unique.sql → 0004_categories.sql → 0005_categories_rls.sql).
+ * drizzle-kit 의 `meta/_journal.json` 은 무시한다 — 0002/0003/0005 는 수기 SQL 이라 정렬 기준만 사용.
+ *
+ * 005 §I-5: Windows path 호환 — `path.dirname(new URL(...).pathname)` 은 Windows 의 `/C:/...`
+ * 접두 슬래시 때문에 깨진다. `fileURLToPath` 로 통일 (vitest.config.ts 동일 패턴).
  */
 
 export type TestDb = {
@@ -40,7 +48,7 @@ export type TestDb = {
 };
 
 const MIGRATIONS_DIR = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   "../../db/migrations",
 );
 
@@ -134,7 +142,7 @@ export async function createTestDb(): Promise<TestDb> {
   const pg = new PGlite();
   await pg.waitReady;
 
-  // auth.uid() shim + authenticated role 은 RLS 정책 정의(0002_rls.sql) 보다 먼저.
+  // auth.uid() shim + authenticated role 은 RLS 정책 정의(0002_rls.sql / 0005_categories_rls.sql) 보다 먼저.
   await definePgliteAuthShim(pg);
   await applyMigrations(pg);
 
@@ -161,11 +169,57 @@ export async function createTestDb(): Promise<TestDb> {
  *
  * pglite 는 단일 연결이므로 다음 drizzle 쿼리에 그대로 이어진다. 다음 테스트의
  * 시드/cleanup pg.query 는 proxy 가 RESET ROLE 해 postgres 로 돌려준다.
+ *
+ * 005 §I-2: async 시그니처로 명시화. 호출자가 `await setAuthContext(...)` 로 GUC/ROLE
+ * 변경 완료를 기다린 뒤 다음 쿼리를 보내도록 강제. pglite 4.x 의 query 큐 FIFO 직렬화 가정에
+ * 대한 암묵적 의존성을 제거 (sfx 라운드 1 🟡 #7).
  */
-export function setAuthContext(testDb: TestDb, userId: string): void {
+export async function setAuthContext(testDb: TestDb, userId: string): Promise<void> {
   const claims = JSON.stringify({ sub: userId });
   const escaped = claims.replace(/'/g, "''");
-  // 동기 인터페이스로 노출 — pglite query 큐가 FIFO 라 다음 await 호출이 이 exec 들 뒤에 직렬화된다.
-  void testDb.pg.exec(`SET request.jwt.claims = '${escaped}'`);
-  void testDb.pg.exec(`SET ROLE authenticated`);
+  // proxy 가 매 호출 직전 RESET ROLE 하므로 raw `testDb.pg` 가 아닌 내부 핸들로 직접 exec.
+  // (proxy 로 호출하면 SET ROLE 직후 다음 호출에서 다시 RESET 되어 무효화된다.)
+  // drizzle 의 raw pglite 인스턴스를 통해 컨텍스트가 유지된다.
+  // pg.exec 자체는 raw 핸들 — proxy 는 testDb.pg 에만 씌워졌고 여기는 내부 client.
+  // 구현 노트: setAuthContext 는 testDb.db 가 쓰는 raw pg 에 접근해야 한다.
+  // testDb.pg 는 proxy 라 RESET ROLE 이 끼어든다 → setAuthContext 의 결과가 무효화됨.
+  // 따라서 GUC / ROLE 을 한 번에 같은 statement 로 보내야 RESET ROLE proxy 이전에 적용됨.
+  // 대신 raw 핸들에 접근하는 길은 drizzle 의 client. testDb.db 의 내부 client 를 통해
+  // execute(sql`...`) 로 보낸다 → drizzle 가 raw pg.query/exec 를 직접 호출 → proxy 미경유.
+  await testDb.db.execute(sql.raw(`SET request.jwt.claims = '${escaped}'`));
+  await testDb.db.execute(sql.raw(`SET ROLE authenticated`));
+}
+
+/**
+ * 인증 컨텍스트 해제 — 다음 테스트 케이스에 누수가 일어나지 않도록.
+ *
+ * Supabase 의 service_role 토큰 흐름과 정합: GUC clear + RESET ROLE 로 superuser 복귀.
+ * afterEach 훅에서 호출 (sfx 라운드 1 🟡 #6).
+ */
+export async function resetAuthContext(testDb: TestDb): Promise<void> {
+  // drizzle 내부 client 경유 — proxy 를 우회해야 ROLE 이 그대로 반영된다.
+  await testDb.db.execute(sql.raw(`RESET ROLE`));
+  await testDb.db.execute(
+    sql.raw(`SELECT set_config('request.jwt.claims', '', false)`),
+  );
+}
+
+/**
+ * 시드/cleanup 용 RLS 우회 헬퍼.
+ *
+ * fn 실행 전 superuser 로 복귀시키고, 끝나면 호출자 컨텍스트로 돌려놓지 않는다
+ * (호출자가 필요하면 다시 setAuthContext 한다). callback handler 의 service_role 흐름과 정합.
+ *
+ * 사용 예 (시나리오 11·18·19·20):
+ *   await asServiceRole(testDb, async () => {
+ *     await seedDefaultCategories(USER_A);
+ *   });
+ */
+export async function asServiceRole<T>(
+  testDb: TestDb,
+  fn: () => Promise<T>,
+): Promise<T> {
+  // drizzle 내부 client 경유 — proxy 를 우회.
+  await testDb.db.execute(sql.raw(`RESET ROLE`));
+  return await fn();
 }
