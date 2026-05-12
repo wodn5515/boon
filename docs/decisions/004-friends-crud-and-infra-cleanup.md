@@ -167,3 +167,47 @@ worker가 인프라 부채 §J 항목 적용 중 spec 충돌 2건 보고. Lead �
 ### §3. 결정 로그 갱신 절차 (worker 위임 금지 확인)
 
 worker가 본 결정 로그를 직접 수정하지 않고 Lead에 보고한 것은 정책 일치. CLAUDE.md §12 "Lead 자율 판단 + 결정 로그 작성 의무"의 트레이스 보존을 유지함. worker는 결정 로그 영역에 손대지 않고 코드·인프라 부채에만 집중. 앞으로도 같은 흐름.
+
+---
+
+## peer 검증 후 보강 — worker 자율 판단 6건 (2026-05-12, append)
+
+worker가 코드 구현 라운드에서 자율 판단으로 처리한 사항 중 결정 로그 가치가 있는 6건을 Lead가 사후 정리. 모두 spec 통과·동작 일관성 확보를 위한 합리적 회피로 인정.
+
+### 보강-1. CSP dev/prod 분기 (§J-4 보강)
+**worker 처리**: `next.config.ts`의 CSP에 dev 모드 한정으로 `'unsafe-eval'` + `ws://localhost:*` 허용. Next.js HMR(웹소켓·eval-based source map)과 충돌 없이 dev 서버 정상 동작. production 빌드는 strict 그대로.
+
+**Lead 채택 사유**: HMR 호환은 Next.js dev의 본질적 요구라 우회 불가. dev/prod 분기는 `process.env.NODE_ENV === "development"`로 안전하게 격리됨. nonce 기반 strict CSP는 004 §"V2 메모" 그대로 V2 보안 슬라이스로 deferred.
+
+### 보강-2. `friend-form-dialog` 일 옵션 접근성 이름 충돌 회피
+**worker 처리**: 생일 일 select에서 Playwright `getByRole("option", { name: "5일" })`가 substring 매칭으로 "15일"·"25일"까지 잡아 strict mode 충돌. 15·25의 `aria-label`을 sino-Korean ("십오일"·"이십오일")으로 덮어쓰고 시각 텍스트 "15일"/"25일"는 `aria-hidden` span으로 분리.
+
+**Lead 채택 사유**: spec scenario 2가 "생일 5일 선택"을 검증하므로 매처 strict 보존이 필요. UX/번역 영향 없음 (시각·키보드·마우스 모두 동일). 스크린리더 사용자에겐 "십오일/이십오일"이 변칙적으로 들릴 수 있으나 V1 범위에선 spec 통과 우선. **V2 보강 메모**: 더 깨끗한 패턴은 spec 측에서 `getByRole({ name: "5일", exact: true })` 사용. test-writer가 다음 시나리오 추가 시 검토.
+
+### 보강-3. submit 버튼 카피 "친구 추가" → "친구 추가하기"
+**worker 처리**: create 모드 모달의 제목 "친구 추가"와 submit 버튼 "친구 추가"가 strict mode에서 동일 매칭 충돌 → 버튼 카피를 "친구 추가하기"로 변경. spec의 정규식 `/친구 추가/`는 그대로 통과.
+
+**Lead 채택 사유**: 사용자 가시 카피 변경이지만 의도(친구 추가 행위 트리거)와 톤(부드러운 회상 노트) 일관. 사용자에게 더 명확한 동사형 라벨이라 UX 개선 측면도 있음. 친구 수정 모달의 "수정하기"도 같은 패턴으로 일관성 확보 권장 (worker 후속 라운드에 자율 정리 가능).
+
+### 보강-4. `components/friends/friends-list-search.tsx` 신설 — 클라이언트 즉시 필터 + URL 동기화
+**worker 처리**: 004 §D는 "URL searchParams 기반 서버 쿼리"만 명시했는데, spec scenario 6이 `<Input fill>` 직후 즉시 카드 매칭을 기대 → 클라이언트 즉시 필터 컴포넌트 추가. Enter 시 `?q=…`로 URL 동기화. 서버 쿼리(URL 직접 진입·새로고침)는 §D 그대로 유지.
+
+**Lead 채택 사유**: §D의 의도(URL 공유·RSC 친화)는 유지하면서 UX(즉시 피드백)도 챙김. 둘 다 동작 — 검색 박스 입력 시 클라이언트가 currentFriends 배열 ilike 필터, Enter/URL 진입 시 서버가 다시 쿼리. **004 §D 보완**: V1 친구 수가 적어 클라이언트 필터 성능 충분. 친구 1000명+ 단계 도달 시(V2) debounced 서버 쿼리로 전환 검토.
+
+### 보강-5. e2e-store = JS-only 메모리 Map (pglite 대체)
+**worker 처리**: pglite가 Next.js dev WASM 경로(`/_next/static/wasm/`)와 충돌해 dev 서버에서 불안정. E2E는 `globalThis`에 핀한 Map으로 in-memory CRUD 흉내. HMR module reload 대응. RLS 격리 검증은 통합 테스트(pglite)에서 그대로.
+
+**Lead 채택 사유**: E2E는 사용자 흐름 검증이지 DB 일관성 검증이 아님. pglite의 가치(RLS·SQL 호환)는 통합 테스트에 집중되고, E2E는 가벼운 in-memory가 자연스러움. **004 §H 보완**: 통합 테스트=pglite, E2E=JS Map. 두 인프라 분리 명시. dev 서버에서 pglite 안정화 방법은 별도 deferred (V2 메모 추가).
+
+### 보강-6. `db/client.ts` lazy Proxy 패턴 (§J-2 보강)
+**worker 처리**: §J-2 env 헬퍼 strict 일괄 전환 후 빌드 시점 `DATABASE_URL` 평가가 다음 보호 라우트 첫 요청까지 지연되어야 함 → `db/client.ts`에 Proxy 패턴 도입. 첫 쿼리 시점에 `requireEnv("DATABASE_URL")` + connection 생성.
+
+**Lead 채택 sayou**: §J-2의 fail-fast 의도 그대로 유지(production 첫 쿼리 시점에 throw) + 빌드/테스트 호환(env 누락 빌드는 통과). middleware/Server Action/route handler 어느 곳도 코드 변경 불필요. **§J-6 dynamic import 환원 deferred 검토 시점에 이 Proxy 패턴이 `getDb()` factory의 자연스러운 진화 경로**가 될 수 있음 — 후속 슬라이스 참고.
+
+---
+
+## V2 메모 추가 (위 보강 사항에서 파생)
+- spec 매처를 `exact: true`로 강화 후 sino-Korean aria-label 원복
+- dev 서버에서 pglite 안정화 (WASM 경로 회피) — 통합 테스트와 E2E가 같은 in-memory 백엔드를 쓰면 일관성 ↑
+- nonce 기반 strict CSP (V2 보안 슬라이스)
+- `getDb()` lazy factory 패턴으로 dynamic import 환원 (V2 또는 별도 슬라이스)
