@@ -64,8 +64,9 @@ boon/
 │   └── integration/     # Vitest 통합 테스트
 ├── e2e/
 │   ├── tests/           # Playwright spec (*.spec.ts)
-│   ├── fixtures/        # 인증 storageState, 시드
-│   └── playwright.config.ts
+│   └── fixtures/        # 인증 storageState, 시드
+├── vitest.config.ts     # Vitest 설정 (jsdom + RTL)
+├── playwright.config.ts # Playwright 설정 (webServer 자동 기동)
 ├── CLAUDE.md            # 이 파일
 └── AGENTS.md            # 에이전트 운영 규칙
 ```
