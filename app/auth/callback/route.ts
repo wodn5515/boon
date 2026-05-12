@@ -1,12 +1,13 @@
 import type { AuthError } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { PostgresError } from "postgres";
 
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * Google OAuth 콜백 핸들러.
  *
- * 흐름 (결정 로그 003 §A·§B + 004 §J-3·§J-7):
+ * 흐름 (결정 로그 003 §A·§B + 004 §J-3·§J-7 + 005 §B):
  *   1. `code` 쿼리 파라미터 부재 → `/login?error=missing_code` 로 302.
  *   2. 정상 `code`:
  *      - Supabase `exchangeCodeForSession(code)` 로 세션 교환.
@@ -16,6 +17,8 @@ import { createClient } from "@/lib/supabase/server";
  *          - 기타 (네트워크 / 5xx) → `?error=network_error`
  *      - provider 가 google 이 아니거나 email 이 비어 있으면 가드 redirect (003 §B).
  *      - 교환 결과의 user 정보를 `users` 테이블에 `onConflictDoNothing()` upsert.
+ *      - **새 user 가 실제로 insert 되었으면** (`.returning()` row 길이 > 0) 같은 트랜잭션에서
+ *        기본 카테고리 3개 시드 (005 §B). 재로그인 시에는 conflict 로 row 없음 → 시드 skip.
  *      - `/` 로 302.
  *
  * `@/db/client` / `@/db/schema/users` 는 dynamic import 다 — 통합 테스트의 vi.mock factory
@@ -37,6 +40,23 @@ function classifyExchangeError(error: AuthError | null | undefined): string {
   }
   // 네트워크 타임아웃 / 5xx / SDK 미상 에러 — 사용자에게 재시도 권유.
   return "network_error";
+}
+
+/**
+ * Postgres SQLSTATE 23505 (unique violation) 판별.
+ *
+ * 005 §I-7 / PR #3 🟢 #6: 기존의 `(e as { code?: unknown }).code` cast 를 `PostgresError` 타입으로 교체.
+ * drizzle/postgres-js wrap 호환: postgres-js 가 원본 에러를 그대로 throw 하면 `instanceof PostgresError`
+ * 가 통과. 만약 wrap 으로 변형되어 instanceof 가 거짓이면 SQLSTATE 만 코드 필드로 노출되므로
+ * 폴백 typed cast 로 보강. 메시지 substring 매칭은 false-positive 우려로 안 씀 (sfx 라운드 2 🟢 #12).
+ */
+function isUniqueViolation(e: unknown): boolean {
+  if (e instanceof PostgresError) {
+    return e.code === "23505";
+  }
+  // 폴백: drizzle wrap 으로 instanceof 거짓이지만 code 필드 보존된 경우.
+  const code = (e as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" && code === "23505";
 }
 
 export async function GET(request: Request) {
@@ -94,33 +114,41 @@ export async function GET(request: Request) {
 
   const { db } = await import("@/db/client");
   const { users } = await import("@/db/schema/users");
+  const { seedDefaultCategories } = await import("@/lib/categories/seed");
 
   // `target: users.id` 로 명시 — id PK 충돌(정상 재로그인) 만 사일런트 무시한다.
   // 0003 마이그레이션의 email / google_id unique 제약 위반 시에는 그대로 throw → catch 로 가시화.
   // (sfx 라운드 1 🟡 #4) Supabase Auth 콘솔 user 삭제 후 같은 이메일 재가입 시 새 id + 같은 email →
   // 기본 onConflictDoNothing() 는 첫 발견 충돌(email unique) 도 무시해 사용자가 로그인 성공한 듯
   // 보이지만 친구 추가 시 FK 위반 500 으로 사일런트 사고. target 명시로 가드.
+  //
+  // 005 §B: users insert 가 실제로 일어났을 때만(`.returning()` row > 0) 기본 카테고리 시드.
+  // 트랜잭션으로 묶어 atomic — users 가 들어갔지만 categories seed 가 실패하면 전체 롤백.
   try {
-    await db
-      .insert(users)
-      .values({
-        id: user.id,
-        email: user.email,
-        google_id: googleId,
-      })
-      .onConflictDoNothing({ target: users.id });
+    await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(users)
+        .values({
+          id: user.id,
+          email: user.email!,
+          google_id: googleId,
+        })
+        .onConflictDoNothing({ target: users.id })
+        .returning({ id: users.id });
+
+      // 새 user 가 실제로 insert 된 경우에만 기본 카테고리 시드.
+      // 재로그인(conflict) 이면 inserted 가 빈 배열 → 시드 skip (멱등성).
+      if (inserted.length > 0) {
+        await seedDefaultCategories(user.id, tx);
+      }
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[auth/callback] users upsert failed", {
       userId: user.id,
       message,
     });
-    // Postgres unique violation 의 SQLSTATE 23505. drizzle / postgres-js 는 원본 에러를 그대로
-    // throw 하므로 `e.code` 로 충분히 판별 가능. 메시지 substring 매칭은 false-positive (다른 SDK
-    // 에러에 "unique" 가 우연히 포함) 가능성이 있어 제거 (sfx 라운드 2 🟢 #12).
-    const code = (e as { code?: unknown }).code;
-    const isUniqueViolation = typeof code === "string" && code === "23505";
-    const errKind = isUniqueViolation ? "account_conflict" : "upsert_failed";
+    const errKind = isUniqueViolation(e) ? "account_conflict" : "upsert_failed";
     return NextResponse.redirect(
       new URL(`/login?error=${errKind}`, url),
       302,

@@ -152,25 +152,11 @@ export function FriendFormDialog({ mode, friend, trigger }: FriendFormDialogProp
                   <SelectValue placeholder="일" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DAYS.map((d) => {
-                    // 15, 25 의 visible "15일"/"25일" 가 검색어 "5일" 의 substring 매칭에 걸려
-                    // E2E strict-mode 충돌. 텍스트는 그대로 두고, 접근성 이름(=radix ItemText 내부 span)
-                    // 만 sino-Korean 으로 덮어쓴다. aria-hidden 으로 시각 span 을 접근성에서 제외하고
-                    // sr-only span 에 sino 표기를 둔다.
-                    const altName = d === 15 ? "십오일" : d === 25 ? "이십오일" : null;
-                    return (
-                      <SelectItem key={d} value={d.toString()}>
-                        {altName ? (
-                          <>
-                            <span aria-hidden="true">{d}일</span>
-                            <span className="sr-only">{altName}</span>
-                          </>
-                        ) : (
-                          <>{d}일</>
-                        )}
-                      </SelectItem>
-                    );
-                  })}
+                  {DAYS.map((d) => (
+                    <SelectItem key={d} value={d.toString()}>
+                      {d}일
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
