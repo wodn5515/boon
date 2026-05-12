@@ -210,8 +210,8 @@ export function CategoryFormDialog({
                 );
               })}
             </div>
-            {/* hidden input 으로 form 에 색상 값을 같이 보낸다 (handleSubmit 에서도 set 함). */}
-            <input type="hidden" name="color" value={color} readOnly />
+            {/* color 값은 handleSubmit 의 formData.set("color", color) 가 단일 source-of-truth.
+                hidden input 중복 (006 §J-5 / PR #4 🟢 #5) 제거. */}
           </div>
 
           {error ? (
