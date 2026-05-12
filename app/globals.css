@@ -13,7 +13,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-pretendard), "Pretendard Variable", Pretendard, system-ui,
     -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
 
   --color-card: var(--card);
