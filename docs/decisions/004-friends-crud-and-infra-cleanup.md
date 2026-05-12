@@ -257,3 +257,31 @@ sfx 라운드 1 검증에서 🔴 1건 + 🟡 6건 + 🟢 4건 발견. worker가
 ## V2 메모 추가 (sfx 라운드 1에서 파생)
 - non-SUPERUSER DB role 전환 (Supabase connection 옵션 등장 시) — 정정-1 후속
 - pglite 헬퍼 시그니처 보강 (GUC reset, async setAuthContext) — test-writer 라운드와 동시 처리
+
+---
+
+## 사용자 PR #3 종합 리뷰 응대 (2026-05-12, append)
+
+사용자 종합 리뷰(https://github.com/wodn5515/boon/pull/3#issuecomment-4428044917)에서 7건 코멘트 + "머지 가능 ✅" 판정. 모두 entries 슬라이스 또는 V2로 **deferred** — 이번 PR 추가 라운드 없음.
+
+### 사용자 명시 권고
+> "이 슬라이스는 인프라 부채를 잘 청산했고, friends 도메인 구현 자체도 application + RLS 이중 방어로 단단하다. 다음 entries 슬라이스가 같은 패턴을 따르면 V1 데이터 격리는 V2 진입까지 안전하게 유지될 것."
+
+### entries 슬라이스 첫 작업 우선순위 (사용자 권고 6건, 그대로 005 결정 로그로 인계)
+1. **🟡 #1 `getCurrentUser()` `react.cache()` 도입** — middleware+layout 중복 Supabase Auth API 호출 dedupe. RSC request 내 layout + 자식 페이지 호출 공유 (middleware는 컨텍스트 분리라 dedupe 불가능). entries 슬라이스가 같은 RSC 트리에서 `getCurrentUser`를 자주 부를 예정이라 그 시점이 적정. 대안: middleware → `x-boon-user-id` header → RSC `headers()` 패턴.
+2. **🟡 #2 + sfx 🟢 #13: RLS 단독 회귀 spec** — 단기(actions.test.ts:150 주석 명확화 — application-layer + RLS 이중 방어로 명시)는 test-writer 라운드. 중기(authenticated role로 SET ROLE 후 application WHERE 우회한 raw UPDATE → 0 row affected 검증)는 test-writer가 entries 슬라이스 spec 잡을 때 함께 추가.
+3. **sfx 🟡 #7: `setAuthContext` async 화** — fire-and-forget `void pg.exec()`를 `await` 강제로 전환. pglite 4.x queue FIFO 직렬화 가정에 대한 명시적 의존성 제거.
+4. **sfx 🟡 #6: pglite GUC reset** — `SET LOCAL` 후 다음 테스트 케이스로 누수 방지. `setAuthContext` async 화와 한 묶음 작업.
+5. **🟢 #3 sino-Korean 우회 원복** — spec 매처를 `getByRole({ name: "5일", exact: true })`로 강화 후 friend-form-dialog의 sino-Korean aria-label 제거. test-writer + worker 동시 라운드.
+6. **🟢 #4 Windows path 통일** — `path.dirname(new URL(...).pathname)` → `path.dirname(fileURLToPath(...))` (vitest.config:13 패턴과 일치). 한 줄 수정.
+7. **🟢 #5 safeRevalidate production warn** — `catch (e) { if (process.env.NODE_ENV === "production") console.warn(...) }` 추가. 운영 가시성.
+8. **🟢 #6 `PostgresError` type** — callback/route.ts:121 `{ code?: unknown }` cast → `import { PostgresError } from "postgres"` + instanceof 또는 typed cast. drizzle wrap 호환성 확인 필요.
+9. **`e2e-store` entries 도메인 확장** — 현재 friends만 모사하는 in-memory Map을 entries 추가 시 같은 패턴으로 확장.
+10. **PR #3 §K 다른 deferred** — 정정-1 패턴 categories/entries에 동일 적용, 결정 로그 005에 §A로 명시.
+
+### 머지 차단 사유
+**없음** — 모든 항목이 nit·should·question 수준이며, 사용자가 명시적으로 "머지 가능 ✅"·"entries 슬라이스에서 묶어 처리"로 판정.
+
+### Lead 판단 채택 사유
+- 사용자가 권고한 "entries 슬라이스에서 묶음" 그대로 채택. 추가 라운드(spec 갱신·worker 라운드)를 강행하면 PR 크기만 키우고 가치는 미미. 이미 18 커밋의 큰 PR이라 깔끔히 머지하는 게 효율적
+- 결정 로그에 트레이스 보존으로 entries 슬라이스 진입 시점에 누락 없이 처리 가능 (005 결정 로그 첫머리에 본 섹션 인용 + 우선순위 1~10 그대로 인계)
