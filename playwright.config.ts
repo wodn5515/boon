@@ -1,15 +1,28 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // Boon의 사용자 흐름 E2E 테스트 설정.
-// 실제 spec 파일은 다음 슬라이스부터 test-writer 에이전트가 e2e/tests/에 작성한다.
 // webServer 옵션으로 `npm run dev`를 자동 기동해 baseURL에서 응답을 받는다.
 
 const PORT = Number(process.env.PORT ?? 3000);
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
+// 결정 로그 003 §D·§E:
+//   실제 Google OAuth 라운드트립이 없는 E2E 슬라이스이므로 Supabase env 는 placeholder 만 주입한다.
+//   `E2E_BYPASS_AUTH=1` + `NODE_ENV !== "production"` 가드가 fake 쿠키 신뢰 경로를 활성화한다.
+//   process.env 에 직접 채워주면:
+//     (a) fixture (`e2e/fixtures/auth.ts`) 가 same-process 에서 그 값을 그대로 읽고
+//     (b) 아래 webServer.env 가 child process 로 넘긴다.
+const FALLBACK_SUPABASE_URL = "https://placeholder.supabase.co";
+const FALLBACK_SUPABASE_ANON_KEY = "placeholder-anon-key";
+const FALLBACK_DATABASE_URL = "postgres://placeholder:placeholder@localhost:5432/placeholder";
+
+process.env.NEXT_PUBLIC_SUPABASE_URL ??= FALLBACK_SUPABASE_URL;
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= FALLBACK_SUPABASE_ANON_KEY;
+process.env.DATABASE_URL ??= FALLBACK_DATABASE_URL;
+process.env.E2E_BYPASS_AUTH ??= "1";
+
 export default defineConfig({
   testDir: "./e2e/tests",
-  // 실제 spec이 없는 부트스트랩 단계에서 testMatch에 매칭되는 파일이 없어도 정상 종료시키기 위함.
   testMatch: /.*\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
@@ -38,5 +51,11 @@ export default defineConfig({
     timeout: 120_000,
     stdout: "ignore",
     stderr: "pipe",
+    env: {
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      DATABASE_URL: process.env.DATABASE_URL,
+      E2E_BYPASS_AUTH: process.env.E2E_BYPASS_AUTH,
+    },
   },
 });
