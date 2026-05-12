@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, Pencil, Trash2 } from "lucide-react";
 
+import { reorderCategory } from "@/app/(authenticated)/settings/actions";
 import { CategoryFormDialog } from "@/components/categories/category-form-dialog";
 import { CategoryDeleteDialog } from "@/components/categories/category-delete-dialog";
 import { Button } from "@/components/ui/button";
@@ -22,8 +24,8 @@ import { cn } from "@/lib/utils";
  *   - "기본" 배지 = text-xs muted + outline 박스 (시스템 카테고리는 보장된다는 시각 신호)
  *   - 시스템 카테고리 삭제 버튼은 hidden (disabled 아닌 hidden — UI 노이즈 축소)
  *
- * 정렬 버튼은 V1 골격에서 placeholder onClick. worker 가 entries/categories 슬라이스에서
- * Server Action(`reorderCategory`)으로 결합한다 — 다만 본 슬라이스에서는 mock 동작 안 함.
+ * 결정 로그 005 §C·§G: 정렬 화살표를 `reorderCategory` Server Action 으로 결합.
+ * onMoveUp/onMoveDown prop 이 명시되면 그것을 우선 사용 (테스트 친화). 없으면 기본 액션.
  */
 type CategoryItemProps = {
   category: Category;
@@ -31,7 +33,7 @@ type CategoryItemProps = {
   isLast?: boolean;
   /** worker 가 결합. 결합 전엔 항상 0 placeholder. */
   entryCount?: number;
-  /** placeholder — worker 가 reorderCategory Server Action 으로 결합. */
+  /** 외부 주입 가능 (테스트·디자이너 골격용). 미지정 시 reorderCategory Server Action 사용. */
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   className?: string;
@@ -46,6 +48,24 @@ export function CategoryItem({
   onMoveDown,
   className,
 }: CategoryItemProps) {
+  const router = useRouter();
+  const [pending, startTransition] = React.useTransition();
+
+  function handleMove(direction: "up" | "down") {
+    const override = direction === "up" ? onMoveUp : onMoveDown;
+    if (override) {
+      override();
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await reorderCategory(category.id, direction);
+        router.refresh();
+      } catch {
+        // silent — 상한·시스템 침범은 서버에서 throw 하지 않고 noop 으로 처리되므로 UI 영향 없음.
+      }
+    });
+  }
   return (
     <li
       data-category-id={category.id}
@@ -100,8 +120,8 @@ export function CategoryItem({
           variant="ghost"
           size="icon-sm"
           aria-label={`${category.name} 위로 이동`}
-          disabled={isFirst}
-          onClick={onMoveUp}
+          disabled={isFirst || pending}
+          onClick={() => handleMove("up")}
         >
           <ChevronUp aria-hidden />
         </Button>
@@ -110,8 +130,8 @@ export function CategoryItem({
           variant="ghost"
           size="icon-sm"
           aria-label={`${category.name} 아래로 이동`}
-          disabled={isLast}
-          onClick={onMoveDown}
+          disabled={isLast || pending}
+          onClick={() => handleMove("down")}
         >
           <ChevronDown aria-hidden />
         </Button>

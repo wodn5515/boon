@@ -13,11 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth/user";
-import {
-  MOCK_CATEGORIES,
-  sortCategories,
-  type Category,
-} from "@/lib/categories/types";
+import { listCategories } from "@/lib/categories/queries";
+import type { Category as UiCategory } from "@/lib/categories/types";
 
 export const metadata: Metadata = {
   title: "설정 · Boon",
@@ -35,16 +32,28 @@ export const metadata: Metadata = {
  *   2) 계정 — 이메일 + 로그아웃 (Server Action `signOut`).
  *   3) V2 안내 — 다크 모드·휴지통 추후 도입 안내.
  *
- * 카테고리 데이터는 본 슬라이스에서 mock(`MOCK_CATEGORIES`). worker 가 categories 슬라이스에서
- * drizzle `listCategories()` 쿼리로 결합한다.
+ * 결정 로그 005 §G·§D:
+ *   - mock 제거, `listCategories()` drizzle 쿼리로 결합 (정렬은 SQL `is_system DESC, sort_order ASC`).
+ *   - entry_count 는 entries 슬라이스에서 결합. V1 골격에선 0 placeholder.
  */
 export default async function SettingsPage() {
-  const user = await getCurrentUser();
+  const [user, dbCategories] = await Promise.all([
+    getCurrentUser(),
+    listCategories(),
+  ]);
   // layout 에서 redirect 처리하지만 ts narrowing 을 위해 추가 가드.
   const email = user?.email ?? null;
 
-  // V1 골격: mock 카테고리. worker 가 db 결합 시 listCategories() 로 교체.
-  const categories: Category[] = sortCategories(MOCK_CATEGORIES);
+  // DB row → UI 도메인 타입 매핑. entry_count 는 entries 슬라이스 전까지 0 placeholder.
+  const categories: UiCategory[] = dbCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+    is_system: c.is_system,
+    sort_order: c.sort_order,
+    entry_count: 0,
+  }));
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">

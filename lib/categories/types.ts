@@ -40,7 +40,9 @@ export const CATEGORY_COLOR_POOL = [
   { value: "#22c55e", label: "초록" },     // brand-primary (물질)
   { value: "#84cc16", label: "라임" },     // brand-lime (시간·행동)
   { value: "#4ade80", label: "연두" },     // brand-light (마음)
-  { value: "#a3e635", label: "옅은 라임" },
+  // "옅은 라임" 은 "라임" substring 매칭에 걸려 E2E spec 의 getByRole({ name: "라임" }) 가
+  // strict mode 충돌. label 을 "연노랑" 으로 분리 (#a3e635 는 lime-400 라 연노랑 톤에 가까움).
+  { value: "#a3e635", label: "연노랑" },
   { value: "#16a34a", label: "짙은 초록" },
   { value: "#fbbf24", label: "주황빛 노랑" },
   { value: "#f472b6", label: "핑크" },
@@ -50,64 +52,14 @@ export const CATEGORY_COLOR_POOL = [
 export const DEFAULT_CATEGORY_COLOR = CATEGORY_COLOR_POOL[0].value;
 
 /**
- * mock 카테고리 — 시스템 3개 + 사용자 카테고리 1~2개.
- *
- * worker 가 db 결합 시 이 export 를 제거하고 `listCategories()` 쿼리로 교체.
- * 정렬은 sort_order 오름차순 (시스템 먼저, 그 후 사용자 가입 순).
- */
-export const MOCK_CATEGORIES: Category[] = [
-  {
-    id: "cat-system-material",
-    name: "물질",
-    icon: "💰",
-    color: "#22c55e",
-    is_system: true,
-    sort_order: 0,
-    entry_count: 0,
-  },
-  {
-    id: "cat-system-time",
-    name: "시간·행동",
-    icon: "⏰",
-    color: "#84cc16",
-    is_system: true,
-    sort_order: 1,
-    entry_count: 0,
-  },
-  {
-    id: "cat-system-mind",
-    name: "마음",
-    icon: "💝",
-    color: "#4ade80",
-    is_system: true,
-    sort_order: 2,
-    entry_count: 0,
-  },
-  {
-    id: "cat-user-meal",
-    name: "밥·음료",
-    icon: "🍚",
-    color: "#fbbf24",
-    is_system: false,
-    sort_order: 10,
-    entry_count: 0,
-  },
-  {
-    id: "cat-user-ride",
-    name: "이동·픽업",
-    icon: "🚗",
-    color: "#60a5fa",
-    is_system: false,
-    sort_order: 11,
-    entry_count: 0,
-  },
-];
-
-/**
  * 카테고리 정렬 — 시스템 우선, 그 후 sort_order 오름차순.
  *
  * 시스템 카테고리는 동일 sort_order 풀에 들어가더라도 항상 목록 상단에 고정한다
  * (D-018: 기본 카테고리는 보장된다는 시각 신호).
+ *
+ * 결정 로그 005 §D: V1 본 슬라이스부터 listCategories() 가 SQL ORDER BY 로 정렬하므로
+ * 본 함수는 호출처 보호용 회귀 잠금 + 클라이언트 측 분기(예: 카테고리 select 컴포넌트의
+ * 정렬 보존)를 위해 유지한다. mock(`MOCK_CATEGORIES`) 은 제거.
  */
 export function sortCategories(rows: Category[]): Category[] {
   return [...rows].sort((a, b) => {
