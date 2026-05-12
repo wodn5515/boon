@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
-
 import { authenticatedStorageState } from "../fixtures/auth";
+import { expect, test } from "../fixtures/test-with-reset";
 
 /**
  * 친구 상세 페이지 × 받은 신세 타임라인 결합 E2E (PRD §3 — entries-crud 슬라이스).

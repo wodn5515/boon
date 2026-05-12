@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
-
 import { authenticatedStorageState } from "../fixtures/auth";
+import { expect, test } from "../fixtures/test-with-reset";
 
 /**
  * 신세(entries) CRUD E2E (PRD §3 — entries-crud 슬라이스).
