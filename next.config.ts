@@ -34,7 +34,10 @@ const CSP_DIRECTIVES = [
   // 외부에서 iframe 삽입 금지 (X-Frame-Options 와 정합).
   "frame-ancestors 'none'",
   "base-uri 'self'",
-  "form-action 'self' https://accounts.google.com",
+  // form-action: Google OAuth Server Action 흐름은 Boon → Supabase /auth/v1/authorize → Google 로
+  // navigation redirect chain 을 거친다. CSP3 spec 은 form-action 을 chain 전체에 적용하므로
+  // Firefox 등 엄격 enforce 환경에서 supabase.co 누락 시 OAuth 자체가 차단된다 (sfx 라운드 1 🟡 #3).
+  "form-action 'self' https://*.supabase.co https://accounts.google.com",
 ].join("; ");
 
 const nextConfig: NextConfig = {
