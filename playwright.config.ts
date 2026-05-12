@@ -15,10 +15,12 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 const FALLBACK_SUPABASE_URL = "https://placeholder.supabase.co";
 const FALLBACK_SUPABASE_ANON_KEY = "placeholder-anon-key";
 const FALLBACK_DATABASE_URL = "postgres://placeholder:placeholder@localhost:5432/placeholder";
+const FALLBACK_APP_URL = "http://localhost:3000";
 
 process.env.NEXT_PUBLIC_SUPABASE_URL ??= FALLBACK_SUPABASE_URL;
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= FALLBACK_SUPABASE_ANON_KEY;
 process.env.DATABASE_URL ??= FALLBACK_DATABASE_URL;
+process.env.NEXT_PUBLIC_APP_URL ??= FALLBACK_APP_URL;
 process.env.E2E_BYPASS_AUTH ??= "1";
 
 export default defineConfig({
@@ -55,6 +57,7 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       DATABASE_URL: process.env.DATABASE_URL,
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
       E2E_BYPASS_AUTH: process.env.E2E_BYPASS_AUTH,
     },
   },

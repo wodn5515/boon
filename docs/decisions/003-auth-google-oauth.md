@@ -30,6 +30,7 @@ PRD §3 V1 인증 슬라이스를 시작하면서 다음 세 갈래의 결정을
 - **provider · email 가정** (sfx 🟡 권고 반영):
   - V1 은 Google provider 전용 (Supabase 콘솔에서 Google 만 활성화). callback 에서 `app_metadata.provider !== "google"` 일 때 `?error=unsupported_provider` 로 가드 — 향후 Apple/Email provider 추가 시 가시화.
   - Google OAuth `email` scope 가 email 을 보장하지만, notNull 컬럼 무결성을 위해 `!user.email` 일 때 `?error=missing_email` 가드를 추가 (도달 불가 경로지만 방어 코딩).
+  - `provider === null` (mock·undefined 케이스) 도 통과한다 — 통합 테스트 mock 호환 의도. production Supabase Auth 는 항상 `app_metadata.provider` 를 채워주므로 도달 가능성 매우 낮음. 이 경로가 production 에서 실제로 진입하는지 확인하려면 callback 핸들러에 `provider === null` 시 `console.warn` 한 줄 추가하는 안을 friends-crud 슬라이스에서 결정 (사용자 PR #2 리뷰 🟢 #3 반영).
 
 ### C. 보호 라우트 매처 (test-writer 요청)
 - **`shouldProtect(pathname)` 순수 함수를 `lib/auth/matcher.ts`에 분리** (named export). middleware는 이 함수를 호출만 한다 → 단위 테스트 가능.
@@ -72,6 +73,9 @@ PRD §3 V1 인증 슬라이스를 시작하면서 다음 세 갈래의 결정을
 - **`next lint` → `eslint .` 마이그레이션**: V1 마무리 직전 단발 `/meta` 슬라이스로 분리. eslint flat config 마이그레이션이 함께 필요해 별도 슬라이스가 깔끔
 - **`users.email` / `users.google_id` unique 제약 추가**: friends-crud 슬라이스에서 RLS 정책 + `friends.user_id` FK 정합성 검증과 함께 결정. 단독 PR 가치 낮음.
 - **dynamic import 환원 검토** (`app/auth/callback/route.ts` 의 `@/db/client` · `@/db/schema/users`): 현재 vi.mock factory hoisting 한계 회피용. friends-crud 슬라이스에서 통합 테스트 인프라(Supabase 로컬 / pglite / docker postgres) 결정 시 static import 환원 가능성 재검토.
+- **테스트 typecheck 인프라** (사용자 PR #2 리뷰 🟡 #1 — 우선순위 1): `tests/**` / `e2e/**` 가 현재 main `tsc --noEmit` 에서 제외돼 있고 `vitest run` 도 기본적으로 typecheck 하지 않음 → 사각지대. friends-crud 진입 시 통합 테스트 인프라 결정과 묶어 옵션 (a) `vitest.config.ts` 의 `test.typecheck.enabled` + 별도 `tsconfig.test.json` 신설, (b) `package.json` 에 `typecheck:tests` 별도 스크립트 — 두 안을 비교해 채택. `vi.fn().mock.calls` 타이핑 한계는 vitest 자체 typecheck 에서도 같은 문제를 낼 수 있어 옵션 검증 필요.
+- **env 헬퍼 strict 전환 + placeholder 폴백 제거** (사용자 PR #2 리뷰 🟢 #5, 💬 #6, 🟡 #2 와 같은 패턴): 본 PR 에서 `getAppUrl()` 만 `requireEnv` 로 통일 — 나머지 호출처(`lib/supabase/server.ts`, `lib/supabase/client.ts`, `db/client.ts`, `middleware.ts`)는 여전히 `process.env[...] ?? "placeholder"` 직접 사용. friends-crud 슬라이스에서 `lib/env.ts` 의 `getSupabaseUrl/AnonKey/DatabaseUrl` 헬퍼로 일괄 전환 + production fail-fast.
+- **callback exchange 에러 코드별 분기** (사용자 PR #2 리뷰): 현재 모든 실패가 `?error=exchange_failed` 동일. Supabase 응답의 `invalid_grant` / `expired_code` / network timeout 등을 구분해 사용자 친화 카피와 함께 분리. friends-crud 슬라이스에서 ERROR_COPY 확장.
 
 ## 근거
 
@@ -113,6 +117,21 @@ PR #1 머지 코멘트(https://github.com/wodn5515/boon/pull/1#issuecomment-4426
 - **`lib/env.ts` 중복 헬퍼 제거**: 미사용 `isE2EAuthBypass()` 삭제. E2E 우회 가드는 `lib/auth/bypass.ts::isE2EBypassEnabled()` 단일 소스 (sfx 🟢 #2).
 
 §B 본문에 unique 제약 미설정 의도 + provider/email 가정을 명시하고, unique 제약 추가는 §J 의 friends-crud deferred 로 묶음.
+
+## PR #2 사용자 종합 리뷰 응대 (라운드 3, append)
+
+사용자 PR #2 리뷰 (https://github.com/wodn5515/boon/pull/2#issuecomment-4426911372) 의 7건 권고 중 4건을 본 PR 라운드 3 에서 즉시 반영, 3건은 §J deferred 로 묶음. Lead 자율 판단.
+
+**즉시 반영**:
+- **🟡 #2 `getAppUrl()` production silent fail**: `process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"` 폴백 제거 → `requireEnv("NEXT_PUBLIC_APP_URL")` 으로 통일. `.env.example` 에 `NEXT_PUBLIC_APP_URL=http://localhost:3000` 기본값 채워 로컬 자동 동작. `playwright.config.ts` env 주입에 NEXT_PUBLIC_APP_URL 추가. production 누락 시 즉시 throw 로 가시화.
+- **🟢 #4 callback exchange 실패 서버 로그**: `console.error("[auth/callback] exchange failed", { code, status, hasUser })` 한 줄 추가. error.message 는 PII 우려로 제외. Supabase SDK 버전 호환 위해 옵셔널 체이닝 + 타입 가드.
+- **🟢 #3 `provider === null` 통과 명시**: §B 의 provider/email 가정 항목에 한 줄 append — mock 호환 의도임을 명시. production 도달 확인용 `console.warn` 도입은 friends-crud 슬라이스 결정.
+- **§J deferred 3건 추가**: 테스트 typecheck 인프라(우선순위 1), env 헬퍼 strict 일괄 전환, callback exchange 에러 코드별 분기.
+
+**§J 로 deferred (friends-crud 슬라이스 첫 작업 우선순위)**:
+1. 테스트 typecheck 인프라 (🟡 #1) — 옵션 비교 후 채택
+2. env 헬퍼 strict 일괄 전환 (🟢 #5 + 💬 #6) — Supabase/db/middleware 호출처 모두 통일
+3. callback exchange 에러 코드별 분기 — ERROR_COPY 확장
 
 ## 후속 영향
 

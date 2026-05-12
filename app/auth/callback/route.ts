@@ -38,6 +38,14 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data?.user) {
+    // Vercel function log 에서 잡힐 수 있도록 서버 로그 한 줄 — sfx/PR 리뷰 🟢 #4 권고.
+    // error.message 는 PII (사용자 이메일 등) 가 섞일 가능성이 있어 코드·상태만 노출.
+    // Supabase SDK 버전마다 error shape 이 달라 옵셔널 체이닝 사용.
+    console.error("[auth/callback] exchange failed", {
+      code: (error as { code?: string } | null | undefined)?.code,
+      status: (error as { status?: number } | null | undefined)?.status,
+      hasUser: Boolean(data?.user),
+    });
     return NextResponse.redirect(
       new URL("/login?error=exchange_failed", url),
       302,
