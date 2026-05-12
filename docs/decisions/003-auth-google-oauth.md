@@ -24,6 +24,12 @@ PRD §3 V1 인증 슬라이스를 시작하면서 다음 세 갈래의 결정을
 - **`users` drizzle 스키마 경로**: `db/schema/users.ts` (named export `users`). test-writer spec이 `@/db/schema/users` 경로로 import한다.
 - 필드: `id UUID PK, email text notNull, google_id text, created_at timestamp notNull`. Supabase Auth `auth.users.id`를 그대로 PK로 사용 (트리거 없이 callback handler에서 upsert).
 - **RLS는 다음 슬라이스(friends-crud)부터 본격 정의**. 이번 슬라이스 `users` 테이블은 callback에서만 쓰여 RLS off로 두되, service role key로 접근하는 패턴을 강제한다.
+- **이번 슬라이스 unique 제약 미설정 의도** (sfx 🟡 권고 반영):
+  - `email`·`google_id` 컬럼에 unique 제약을 두지 않는다. 정상 흐름은 `id` PK + `onConflictDoNothing()` 만으로 중복 방지 충분.
+  - 엣지 케이스 (Supabase 콘솔에서 user 삭제 후 같은 Google 계정으로 재가입): 새 `id` + 같은 `email`/`google_id` row 가 추가될 수 있음 — V1 단일 사용자 토이 단계에서 발생 빈도 낮고, unique 제약은 friends-crud 슬라이스의 RLS·FK 정책과 함께 결정하는 게 자연스러움 (§J 로 deferred).
+- **provider · email 가정** (sfx 🟡 권고 반영):
+  - V1 은 Google provider 전용 (Supabase 콘솔에서 Google 만 활성화). callback 에서 `app_metadata.provider !== "google"` 일 때 `?error=unsupported_provider` 로 가드 — 향후 Apple/Email provider 추가 시 가시화.
+  - Google OAuth `email` scope 가 email 을 보장하지만, notNull 컬럼 무결성을 위해 `!user.email` 일 때 `?error=missing_email` 가드를 추가 (도달 불가 경로지만 방어 코딩).
 
 ### C. 보호 라우트 매처 (test-writer 요청)
 - **`shouldProtect(pathname)` 순수 함수를 `lib/auth/matcher.ts`에 분리** (named export). middleware는 이 함수를 호출만 한다 → 단위 테스트 가능.
@@ -64,6 +70,8 @@ PRD §3 V1 인증 슬라이스를 시작하면서 다음 세 갈래의 결정을
 ### J. 마이그레이션 deferred
 - **Playwright CI 빌드 모드 분기** (`next build && next start` for CI): 다음 슬라이스(friends-crud)에서 실제 GitHub Actions 셋업 시점에 결정
 - **`next lint` → `eslint .` 마이그레이션**: V1 마무리 직전 단발 `/meta` 슬라이스로 분리. eslint flat config 마이그레이션이 함께 필요해 별도 슬라이스가 깔끔
+- **`users.email` / `users.google_id` unique 제약 추가**: friends-crud 슬라이스에서 RLS 정책 + `friends.user_id` FK 정합성 검증과 함께 결정. 단독 PR 가치 낮음.
+- **dynamic import 환원 검토** (`app/auth/callback/route.ts` 의 `@/db/client` · `@/db/schema/users`): 현재 vi.mock factory hoisting 한계 회피용. friends-crud 슬라이스에서 통합 테스트 인프라(Supabase 로컬 / pglite / docker postgres) 결정 시 static import 환원 가능성 재검토.
 
 ## 근거
 
@@ -95,6 +103,16 @@ PR #1 머지 코멘트(https://github.com/wodn5515/boon/pull/1#issuecomment-4426
 - 💬 보안 헤더 → §I (이번 PR 일부, CSP는 §J로 deferred)
 - 💬 Playwright CI → §J (deferred to friends-crud)
 - 💬 next lint → §J (deferred to V1 마무리 전 별도 `/meta`)
+
+## peer 검증 후 보강 (sfx 🟡 / 🟢 권고 반영, append)
+
+라운드 1 sfx 검증에서 🔴 0건, 🟡 3건, 🟢 3건. 머지 차단은 없었으나 다음을 본 PR 안에서 즉시 반영:
+
+- **callback handler 가드 추가**: `provider !== "google"` → `?error=unsupported_provider`, `!user.email` → `?error=missing_email`. `?? ""` 폴백은 제거하여 notNull 무결성을 명시적 redirect 로 보호 (sfx 🟡 #1·#3).
+- **`/login` error 쿼리 노출**: `searchParams.error` 를 매핑해 카드 안에 `role="alert"` 로 부드럽게 표시. 사일런트 fail 제거 (sfx 🟢 #1).
+- **`lib/env.ts` 중복 헬퍼 제거**: 미사용 `isE2EAuthBypass()` 삭제. E2E 우회 가드는 `lib/auth/bypass.ts::isE2EBypassEnabled()` 단일 소스 (sfx 🟢 #2).
+
+§B 본문에 unique 제약 미설정 의도 + provider/email 가정을 명시하고, unique 제약 추가는 §J 의 friends-crud deferred 로 묶음.
 
 ## 후속 영향
 

@@ -30,19 +30,11 @@ export function getDatabaseUrl(): string {
 }
 
 /**
- * E2E 테스트에서만 동작하는 인증 우회 플래그.
- * 결정 로그 003 §D 참고 — `NODE_ENV !== "production"` 가드와 AND.
- */
-export function isE2EAuthBypass(): boolean {
-  return (
-    process.env.E2E_BYPASS_AUTH === "1" &&
-    process.env.NODE_ENV !== "production"
-  );
-}
-
-/**
  * OAuth callback에서 사용할 앱 URL.
  * 없으면 로컬 개발 기본값으로 폴백한다.
+ *
+ * 참고: E2E 인증 우회 플래그(`E2E_BYPASS_AUTH`)는 `lib/auth/bypass.ts` 의
+ *   `isE2EBypassEnabled()` 가 단일 소스 — 가드 변경 시 한 곳만 수정하면 된다.
  */
 export function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

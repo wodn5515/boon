@@ -9,6 +9,9 @@ import { createClient } from "@/lib/supabase/server";
  *   1. `code` 쿼리 파라미터 부재 → `/login?error=missing_code` 로 302.
  *   2. 정상 `code`:
  *      - Supabase `exchangeCodeForSession(code)` 로 세션 교환.
+ *      - provider 가 google 이 아니거나 email 이 비어 있으면 가드 redirect (sfx 🟡 권고).
+ *        Supabase Google scope 가 email 을 보장하므로 정상 흐름에서 도달 불가하지만,
+ *        notNull 컬럼에 빈 문자열이 흘러 들어가는 것을 막기 위한 방어 코딩.
  *      - 교환 결과의 user 정보를 `users` 테이블에 `onConflictDoNothing()` upsert.
  *      - `/` 로 302.
  *
@@ -42,6 +45,27 @@ export async function GET(request: Request) {
   }
 
   const user = data.user;
+
+  // V1 은 Google provider 전용 (결정 로그 003 §A). 다른 provider 가 섞이면 가시화.
+  const provider =
+    typeof user.app_metadata?.provider === "string"
+      ? user.app_metadata.provider
+      : null;
+  if (provider !== null && provider !== "google") {
+    return NextResponse.redirect(
+      new URL("/login?error=unsupported_provider", url),
+      302,
+    );
+  }
+
+  // Google scope 가 email 을 보장하지만, notNull 컬럼 무결성을 위해 명시적 가드.
+  if (!user.email) {
+    return NextResponse.redirect(
+      new URL("/login?error=missing_email", url),
+      302,
+    );
+  }
+
   const googleId =
     typeof user.user_metadata?.sub === "string" ? user.user_metadata.sub : null;
 
@@ -52,7 +76,7 @@ export async function GET(request: Request) {
     .insert(users)
     .values({
       id: user.id,
-      email: user.email ?? "",
+      email: user.email,
       google_id: googleId,
     })
     .onConflictDoNothing();

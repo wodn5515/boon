@@ -20,6 +20,7 @@ import { signInWithGoogle } from "./actions";
  * - Server Component. 진입 시 세션 검사 → 이미 로그인 상태면 `/` 로 redirect (결정 로그 003 §A).
  * - 비로그인 상태에서는 Boon 타이틀 + Google 버튼이 보이는 카드 형태.
  * - 베이지 배경 + 흰 카드, 초록 톤은 강조에만 미세하게 (PRD §6).
+ * - `?error=<code>` 쿼리를 카드 안에서 부드럽게 알림으로 노출 (sfx 🟢 권고).
  *
  * 디자이너가 만든 UI 외형(c789be3)은 그대로 보존하고, form action 만 Server Action 으로 교체.
  */
@@ -29,11 +30,28 @@ export const metadata: Metadata = {
   description: "Google 계정으로 Boon에 로그인합니다.",
 };
 
-export default async function LoginPage() {
+const ERROR_COPY: Record<string, string> = {
+  missing_code: "OAuth 응답에서 인증 코드를 찾지 못했어요. 다시 시도해 주세요.",
+  exchange_failed: "세션을 만드는 중 문제가 발생했어요. 다시 시도해 주세요.",
+  oauth_init: "Google 로그인 시작에 실패했어요. 잠시 후 다시 시도해 주세요.",
+  missing_email: "Google 계정의 이메일을 받아오지 못했어요. 권한을 허용했는지 확인해 주세요.",
+  unsupported_provider: "현재는 Google 로그인만 지원해요.",
+};
+
+type LoginPageProps = {
+  // Next.js 15 App Router 에서 searchParams 는 Promise 로 전달된다.
+  searchParams: Promise<{ error?: string | string[] }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const user = await getCurrentUser();
   if (user) {
     redirect("/");
   }
+
+  const params = await searchParams;
+  const rawError = Array.isArray(params.error) ? params.error[0] : params.error;
+  const errorMessage = rawError ? ERROR_COPY[rawError] : null;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12 sm:px-6">
@@ -59,6 +77,15 @@ export default async function LoginPage() {
           <p className="text-center text-sm leading-relaxed text-muted-foreground">
             친구한테 받은 신세를 기록하는 1인용 노트
           </p>
+
+          {errorMessage ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-center text-xs leading-relaxed text-destructive"
+            >
+              {errorMessage}
+            </p>
+          ) : null}
 
           <form action={signInWithGoogle} className="flex flex-col gap-2">
             <GoogleButton />
