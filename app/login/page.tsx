@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { GoogleButton } from "@/components/auth/google-button";
 import {
@@ -9,18 +10,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getCurrentUser } from "@/lib/auth/user";
+
+import { signInWithGoogle } from "./actions";
 
 /**
- * `/login` — Google OAuth 진입 페이지 (UI 골격).
+ * `/login` — Google OAuth 진입 페이지.
  *
- * - Server Component (인증 상태 체크는 다음 슬라이스에서 worker가 추가).
- * - PRD §3 인증 / §5 사이트맵 / §6 디자인 시스템 기준.
- * - 베이지 배경 + 흰 카드, 초록 톤은 강조에만 미세하게.
+ * - Server Component. 진입 시 세션 검사 → 이미 로그인 상태면 `/` 로 redirect (결정 로그 003 §A).
+ * - 비로그인 상태에서는 Boon 타이틀 + Google 버튼이 보이는 카드 형태.
+ * - 베이지 배경 + 흰 카드, 초록 톤은 강조에만 미세하게 (PRD §6).
  *
- * placeholder 포인트 (worker가 다음 슬라이스에서 결합):
- *   1. `<form action="#login-pending">` — Supabase `signInWithOAuth` 호출하는
- *      Server Action 또는 클라이언트 핸들러로 교체.
- *   2. 약관 한 줄 — V2에 본문 페이지(`/terms`, `/privacy`)가 추가되면 링크 연결.
+ * 디자이너가 만든 UI 외형(c789be3)은 그대로 보존하고, form action 만 Server Action 으로 교체.
  */
 
 export const metadata: Metadata = {
@@ -28,7 +29,12 @@ export const metadata: Metadata = {
   description: "Google 계정으로 Boon에 로그인합니다.",
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const user = await getCurrentUser();
+  if (user) {
+    redirect("/");
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12 sm:px-6">
       <Card className="w-full max-w-md gap-6 p-6 sm:p-8">
@@ -54,12 +60,7 @@ export default function LoginPage() {
             친구한테 받은 신세를 기록하는 1인용 노트
           </p>
 
-          {/*
-            placeholder: 다음 슬라이스에서 worker가 이 form을
-            Server Action(또는 클라이언트 핸들러)으로 결합한다.
-            지금은 의도적으로 동작하지 않는 anchor(`#login-pending`)로 둔다.
-          */}
-          <form action="#login-pending" className="flex flex-col gap-2">
+          <form action={signInWithGoogle} className="flex flex-col gap-2">
             <GoogleButton />
           </form>
         </CardContent>
