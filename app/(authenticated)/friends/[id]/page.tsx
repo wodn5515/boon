@@ -1,16 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Cake, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Cake, Pencil, Plus, Trash2 } from "lucide-react";
 
+import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
+import { EntryItem } from "@/components/entries/entry-item";
 import { FriendDeleteDialog } from "@/components/friends/friend-delete-dialog";
 import { FriendFormDialog } from "@/components/friends/friend-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InitialAvatar } from "@/components/ui/initial-avatar";
 import { birthdayCountdownLabel } from "@/lib/friends/birthday";
-import { getFriendById } from "@/lib/friends/queries";
+import { getFriendById, listFriends } from "@/lib/friends/queries";
 import { formatBirthday } from "@/lib/friends/types";
+import { listCategories } from "@/lib/categories/queries";
+import {
+  MOCK_CATEGORIES_FOR_SELECT,
+  MOCK_ENTRIES,
+  MOCK_FRIENDS_FOR_COMBOBOX,
+  type Entry,
+} from "@/lib/entries/types";
 
 type FriendDetailPageProps = {
   // Next.js 15: params 는 Promise.
@@ -35,10 +44,17 @@ export async function generateMetadata({
  *     친구를 URL 로 찔러 들어와도 null 이라 404.
  *   - soft-deleted 친구는 쿼리에서 자동 제외 (is_deleted=false 필터) — 삭제 직후 redirect 와 정합.
  *
- * entries 슬라이스 전까지 placeholder:
- *   - 통계 카드: entries 슬라이스에서 집계
- *   - 받은 신세 타임라인: entries 슬라이스에서 결합
- *   - entry_count: 0 고정 (UI 컴포넌트 호환).
+ * entries 슬라이스 (현재 슬라이스):
+ *   - 받은 신세 타임라인 = EntryItem 카드 리스트. V1 디자이너 골격에서는 mock 으로 시연.
+ *   - 친구 정보 카드 우측 상단에 "신세 추가" 버튼 — defaultFriendId=friend.id 로
+ *     EntryFormDialog 가 친구를 미리 선택한 상태로 열린다.
+ *   - 통계 카드는 본 슬라이스에서 placeholder 유지 — 다음 dashboard-widgets 슬라이스에서 결합.
+ *
+ * worker 결합 포인트:
+ *   - mock entries 제거 → `listEntriesByFriend(friend.id)` 같은 쿼리 결과로 교체.
+ *   - friendOptions / categoryOptions = listFriends() / listCategories() 결과 사용.
+ *   - EntryFormDialog 의 onSubmitAction = createEntry / updateEntry Server Action.
+ *   - EntryItem 의 onDeleteAction = deleteEntry Server Action.
  */
 export default async function FriendDetailPage({ params }: FriendDetailPageProps) {
   const { id } = await params;
@@ -53,8 +69,47 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
     friend.birthday_month,
     friend.birthday_day,
   );
-  // entries 슬라이스 결합 전까지 0 placeholder. friend-form-dialog / delete-dialog 가 entry_count 를 받는다.
-  const entryCount = 0;
+
+  // === entries 슬라이스 결합: friend 의 받은 신세 목록 ===
+  // V1 골격: mock 데이터를 친구 이름으로 재라벨링해 미리보기. worker 가 listEntriesByFriend(id) 로 교체.
+  const friendEntries: Entry[] = MOCK_ENTRIES.map((e) => ({
+    ...e,
+    friend_id: friend.id,
+    friend_name: friend.name,
+  }));
+  const entryCount = friendEntries.length;
+
+  // combobox / select 옵션 — worker 가 실제 쿼리로 교체.
+  // V1 골격에서는 listFriends() 가 결합돼 있으면 그대로 쓰고, 실패하거나 비어 있으면 mock 으로 fallback.
+  let friendOptions: ReadonlyArray<{ id: string; name: string }>;
+  try {
+    const rows = await listFriends();
+    friendOptions = rows.length > 0
+      ? rows.map((r) => ({ id: r.id, name: r.name }))
+      : MOCK_FRIENDS_FOR_COMBOBOX;
+  } catch {
+    friendOptions = MOCK_FRIENDS_FOR_COMBOBOX;
+  }
+  let categoryOptions: ReadonlyArray<{
+    id: string;
+    name: string;
+    icon: string | null;
+    color: string;
+  }>;
+  try {
+    const rows = await listCategories();
+    categoryOptions = rows.length > 0
+      ? rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          icon: r.icon,
+          color: r.color,
+        }))
+      : MOCK_CATEGORIES_FOR_SELECT;
+  } catch {
+    categoryOptions = MOCK_CATEGORIES_FOR_SELECT;
+  }
+
   const friendForUi = {
     id: friend.id,
     name: friend.name,
@@ -109,35 +164,55 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
               </p>
             )}
           </div>
-          <div className="flex shrink-0 gap-1">
-            <FriendFormDialog
-              mode="edit"
-              friend={friendForUi}
-              trigger={
-                <Button variant="ghost" size="icon-sm" aria-label="친구 정보 수정">
-                  <Pencil aria-hidden />
-                </Button>
-              }
-            />
-            <FriendDeleteDialog
-              friend={friendForUi}
-              entryCount={entryCount}
+          <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
+            {/* 친구별 신세 추가 — defaultFriendId 로 친구 미리 선택 */}
+            <EntryFormDialog
+              mode="create"
+              defaultFriendId={friend.id}
+              friendOptions={friendOptions}
+              categoryOptions={categoryOptions}
               trigger={
                 <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="친구 삭제"
-                  className="text-destructive hover:text-destructive"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  aria-label={`${friend.name}한테 받은 신세 추가`}
                 >
-                  <Trash2 aria-hidden />
+                  <Plus aria-hidden />
+                  신세 추가
                 </Button>
               }
             />
+            <div className="flex gap-1">
+              <FriendFormDialog
+                mode="edit"
+                friend={friendForUi}
+                trigger={
+                  <Button variant="ghost" size="icon-sm" aria-label="친구 정보 수정">
+                    <Pencil aria-hidden />
+                  </Button>
+                }
+              />
+              <FriendDeleteDialog
+                friend={friendForUi}
+                entryCount={entryCount}
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="친구 삭제"
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                }
+              />
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* 통계 카드 (placeholder — entries 슬라이스 결합) */}
+      {/* 통계 카드 (placeholder — 다음 dashboard-widgets 슬라이스에서 결합) */}
       <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card size="sm" className="px-3">
           <CardHeader className="px-0">
@@ -169,17 +244,53 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
         </Card>
       </section>
 
-      {/* 받은 신세 타임라인 (placeholder) */}
+      {/* 받은 신세 타임라인 */}
       <section className="mt-6">
-        <h2 className="font-heading text-lg font-medium text-foreground">
-          받은 신세 타임라인
-        </h2>
-        <Card size="sm" className="mt-3 items-center gap-2 bg-accent/30 py-8 text-center">
-          <p className="text-sm text-foreground">받은 신세가 아직 없어요</p>
-          <p className="text-xs text-muted-foreground">
-            빠른 입력으로 첫 신세를 기록해 보세요.
-          </p>
-        </Card>
+        <div className="flex items-center justify-between">
+          <h2 className="font-heading text-lg font-medium text-foreground">
+            받은 신세 타임라인
+          </h2>
+          {friendEntries.length > 0 ? (
+            <span className="text-xs text-muted-foreground">
+              총 {entryCount}개
+            </span>
+          ) : null}
+        </div>
+
+        {friendEntries.length > 0 ? (
+          <ul className="mt-3 flex flex-col gap-2">
+            {friendEntries.map((entry) => (
+              <EntryItem
+                key={entry.id}
+                entry={entry}
+                /* 친구 상세 페이지에선 친구 아바타 redundant → 기본 false */
+                friendOptions={friendOptions}
+                categoryOptions={categoryOptions}
+              />
+            ))}
+          </ul>
+        ) : (
+          <Card size="sm" className="mt-3 items-center gap-2 bg-accent/30 py-8 text-center">
+            <p className="text-sm text-foreground">
+              이 친구한테 받은 신세가 아직 없어요
+            </p>
+            <p className="text-xs text-muted-foreground">
+              첫 신세를 기록해 보세요.
+            </p>
+            <EntryFormDialog
+              mode="create"
+              defaultFriendId={friend.id}
+              friendOptions={friendOptions}
+              categoryOptions={categoryOptions}
+              trigger={
+                <Button variant="outline" size="sm" className="mt-2 gap-1">
+                  <Plus aria-hidden />
+                  이 친구한테 받은 신세 추가
+                </Button>
+              }
+            />
+          </Card>
+        )}
       </section>
     </main>
   );
