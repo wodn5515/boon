@@ -142,6 +142,25 @@ worker가 §J-2 (CategoryItem isFirst/isLast 그룹 경계) 구현 후 spec 시�
 
 **거절 대안**: spec 약화 (회귀 방어선 손상), 그대로 + PR 본문 명시 (부채 누적)
 
+### §J-7 후속 (worker 라운드 발견 — 멀티-워커 race, 2026-05-12)
+
+worker가 reset fixture 통합 후 `npm run test:e2e` 재실행에서 **로컬 멀티-워커 환경**의 추가 부채 발견. 32/32 시리얼(workers=1, CI 모드)는 통과하지만, 로컬 기본(`workers: process.env.CI ? 1 : undefined`)에서 N개 worker가 dev 서버 1개·e2e-store 1개를 공유 → reset과 state-set 인터리브 race로 6 실패.
+
+본 부채 본질:
+- e2e-store 도입 시점(005 §H)부터 잠재 회귀였음. fixture 도입 전엔 store에 잔존 state 없어서 무해.
+- 본 PR이 새로 도입한 문제가 아니라, 가시화시킨 것.
+
+**Lead 자율 판단**: 옵션 2 채택 — `playwright.config.ts`에 `workers: 1` 강제. CI/로컬 동작 일치 + 토이 단계 멀티-워커 속도 이점 무의미. per-test session ID 기반 store namespace(옵션 3)는 e2e-store 자체 재설계라 별도 슬라이스(V2 또는 dashboard 후) 가치.
+
+**처리**: worker가 `playwright.config.ts`의 `workers` 라인을 `workers: 1` 로 고정 (CI와 동일). 로컬에서도 자연 32/32 통과.
+
+**거절 대안**:
+- (A) PR 본문에 "Deferred" 명시 + 그대로 진행 — 로컬에서 깨지는 spec이 남아 개발자 혼란
+- (C) per-test session ID 격리 — 본 PR 범위 초과, e2e-store 재설계 필요
+
+### V2 메모 추가
+- **per-test session ID 기반 e2e-store namespace** (멀티-워커 격리 + 속도 회복) — V2 또는 별도 슬라이스. dashboard-widgets·excel-import 후 정리 가치
+
 ## 근거
 
 - **entries 본격 도입**: V1 핵심 도메인 entity. friends·categories 결합 + 보답 시점 4종 비즈니스 룰 + 인라인 친구 빠른 생성 → V1에서 가장 복잡한 슬라이스. 베이스 인프라(정정-1, pglite, RLS 단독 회귀)가 안정된 PR #4 위에서 자연 진입
