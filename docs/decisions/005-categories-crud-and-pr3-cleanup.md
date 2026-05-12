@@ -133,3 +133,31 @@ entries 슬라이스로 deferred 잔여 (2건):
 - 카테고리 색상 = 자유 hex picker
 - 친구 사진 업로드 (V1 이니셜 아바타)
 - 다크 모드, 휴지통 복구 UI
+
+---
+
+## 사용자 PR #4 종합 리뷰 응대 (2026-05-12, append)
+
+사용자 리뷰(https://github.com/wodn5515/boon/pull/4#issuecomment-4428804453)에서 6건 코멘트 + "머지 가능 ✅" + 슬라이스 운영 방식 긍정 평가. 모두 entries 슬라이스로 **deferred** — 이번 PR 추가 라운드 없음.
+
+### 사용자 명시 평가
+> "이번 슬라이스는 카테고리 도메인 자체보다도 'PR #3 부채를 끝까지 갚으면서 새 도메인을 깨끗하게 시작하는 방법'에 대한 좋은 사례. 부채 청산을 다음 슬라이스로 미루지 않고 같은 PR에 묶어 처리한 판단이 옳았다 — 정정-1 패턴이 친구/카테고리 둘 다 일관되어 entries 슬라이스 진입이 자연스러워졌다."
+
+이 평가는 향후 슬라이스 운영 원칙으로 인계: **부채 청산 ↔ 새 도메인 도입은 분리보다 통합이 자연스러움** (정정-1 같은 패러다임 전환이 후속 슬라이스의 베이스가 되는 경우).
+
+### entries 슬라이스 첫 작업 우선순위 (사용자 권고 6건, 그대로 006 결정 로그로 인계)
+
+1. **🟡 #1 `signOut` 실패 시 cookie fail-safe** — `supabase.auth.signOut()` 네트워크 실패 시 sb-{ref}-auth-token 쿠키가 살아남아 자동 재로그인되는 silent bug. fail-safe로 `cookieStore.delete()` 또는 결정 로그에 트레이드오프 명시 (cookies 강제 삭제 채택 권장 — 사용자 의도와 실제 동작 일치)
+2. **🟡 #2 `CategoryItem` `isFirst`/`isLast` 그룹 경계** — 통합 인덱스 → 그룹별 인덱스(`userStartIdx`)로 분리. 한 줄 수정 (사용자가 "본 PR 안에서 처리 가능"이라 명시했으나 entries 슬라이스 첫 cleanup으로 묶음)
+3. **🟢 #3 `setAuthContext` parameterized** — `sql.raw('SET request.jwt.claims = \\'${escaped}\\'')` → `sql\`SELECT set_config('request.jwt.claims', ${claims}, false)\``. SQL injection 사각지대 제거. `SET ROLE`은 hardcoded literal이라 raw 유지
+4. **🟢 #4 `safeRevalidate` 공통화** — `lib/server/revalidate.ts` 추출. entries 슬라이스 actions에도 같은 패턴 쓸 거라 그 시점에 한 번에 정리
+5. **🟢 #5 `CategoryFormDialog` color hidden input 제거** — `formData.set("color", color)` (handleSubmit) + `<input type="hidden">` 둘 다 있음. controlled state가 handleSubmit에서 합류하는 패턴이 명확. hidden 제거
+6. **💬 #6 `signOut` 트레이드오프 결정 로그 명시** — 본 슬라이스 §C의 `signOut` 항목에 cookie 잔존 트레이드오프 한 줄 추가 + cookies fail-safe 채택 결정을 entries 슬라이스 첫 커밋에 묶음
+
+### 머지 차단 사유
+**없음** — 모든 항목이 should·nit·question 수준이며, 사용자가 명시적으로 "머지 가능 ✅"·"entries 슬라이스에서 묶어 처리"로 판정.
+
+### Lead 판단 채택 사유
+- 사용자 권고 그대로 "entries 슬라이스에서 묶음" 채택. 16 커밋의 큰 PR이라 깔끔히 머지 + 결정 로그 트레이스 보존
+- entries 슬라이스(006)는 본 슬라이스의 정정-1 패턴 + RLS 단독 회귀 spec + pglite 헬퍼 위에서 자연스럽게 시작 — 사용자 평가대로 베이스 일관성 확보됨
+- 다음 슬라이스 진입 시 006 결정 로그 첫머리에 본 섹션 인용 + 우선순위 6건 그대로 인계
