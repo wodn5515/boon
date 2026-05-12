@@ -52,18 +52,28 @@ find .worktrees -maxdepth 1 -name 'feature-*' -o -name 'hotfix-*' 2>/dev/null
 ## 코드 작업
 
 ### 권한 (테스트 분리 원칙)
-- **구현 파일만 쓰기 가능**: `app/**`, `components/**`, `lib/**`, `db/**`, `next.config.*`, `package.json` 등
+- **구현 파일만 쓰기 가능**: `app/**`, `components/**`, `lib/**`, `db/**`, `next.config.*`, `package.json`, `README.md` 등
 - **테스트 파일은 읽기 전용**: `tests/**`, `e2e/**`, `vitest.config.ts`, `playwright.config.ts` — 수정 금지
-- 테스트 spec이 잘못됐다고 판단되면 직접 고치지 말고 Lead에 `SendMessage`로 합의 요청 → Lead가 test-writer 단발 재호출로 수정
+- 테스트 spec이 잘못됐다고 판단되면 직접 고치지 말고 Lead에 `SendMessage`로 보고 → **Lead가 자율 판단**해 spec을 갱신하거나 유지 (사용자에게 묻지 않음)
+
+### README.md 동기화 의무
+다음 변경이 발생하면 **반드시 같은 커밋(또는 같은 PR)에서 README.md를 함께 갱신**한다:
+- 사용자 가시 기능 추가/제거/변경 (V1 기능 목록, 보답 시점 타입, 위젯 종류 등)
+- 기술 스택 변경 (의존성 추가/교체, 빌드 도구 변경)
+- 사이트맵 변경 (라우트 추가/제거/이동)
+- 데이터 모델 핵심 변경 (엔티티 추가/제거, V1 범위 변경)
+- 디자인 톤·컬러 체계 변경
+
+내부 리팩토링, 단순 버그 수정, 스타일 마이크로 조정은 README 동기화 불필요. 애매하면 README을 보고 "지금 변경이 README의 어느 문장을 거짓으로 만드는가" 확인 — 거짓으로 만들면 갱신.
 
 ### 원칙
 - 변경 전 반드시 기존 코드와 선작성된 테스트 파일을 읽고 의도를 이해한다
 - 변경 시 다른 기능에 영향이 없는지 확인한다
 - CLAUDE.md의 기술 스택과 규칙을 따른다
-- **TDD 선작성 spec이 있는 경우** (Lead가 팀 spawn 전 `test-writer`로 spec을 잡고 사용자 승인을 받은 경우):
+- **TDD 선작성 spec이 있는 경우** (Lead가 팀 spawn 전 `test-writer`로 spec을 잡고 Lead가 채택한 경우):
   - spawn 프롬프트에 "선작성된 spec: `e2e/tests/<경로>.spec.ts`, `tests/<경로>.test.ts` — 통과시켜라"가 명시된다
   - 그 spec(단위/통합/E2E 전 레이어)을 통과시키는 방향으로 구현한다
-  - **통과를 위해 spec 자체를 약화시키는 수정은 금지** (Lead와 합의 없이는). 테스트 파일은 읽기 전용이라 손댈 수도 없음
+  - **통과를 위해 spec 자체를 약화시키는 수정은 금지**. 테스트 파일은 읽기 전용이라 손댈 수도 없음. 약화가 필요하면 Lead에 보고하고 Lead 판단을 기다림
   - 모든 선작성 테스트가 초록이 된 뒤에야 peer 검증 단계로 진입
 
 ### 커밋
@@ -93,11 +103,17 @@ npm run test:e2e
 
 판단:
 - **TDD 선작성 spec이 있는 작업**: 선작성된 모든 테스트(단위/통합/E2E)가 통과해야 한다. 실패하면 구현을 보완하고 다시 실행
-  - 테스트 코드를 직접 수정하지 마라 (읽기 전용). spec이 잘못됐다고 판단되면 Lead에 `SendMessage`로 합의 요청
+  - 테스트 코드를 직접 수정하지 마라 (읽기 전용). spec이 잘못됐다고 판단되면 Lead에 `SendMessage`로 보고 — Lead가 자율 판단해 spec을 갱신하거나 유지
 - **TDD 선작성을 생략한 작업** (리팩토링·스타일·문서 등): 기존 smoke가 깨지지 않는지만 확인. 환경 준비가 부적합하면 실행을 생략하고 PR 본문에 "테스트 미실행: 사유" 한 줄로 명시
 - **실행 자체가 환경 문제로 실패** (docker compose 미기동, 브라우저 미설치): 환경 준비 후 재실행. 그래도 안 되면 Lead에 보고
 
-모든 테스트가 통과(또는 정당한 사유로 생략)된 뒤에야 peer 검증 단계로 넘어간다.
+모든 테스트가 통과(또는 정당한 사유로 생략)된 뒤, **README.md 동기화 점검**을 수행한 뒤 peer 검증 단계로 넘어간다.
+
+### README 동기화 점검 (peer 검증 직전)
+1. 이번 작업의 diff를 한 번 더 본다
+2. README.md의 "주요 기능", "기술 스택", "사이트맵", "데이터 모델", "디자인 톤" 섹션과 대조
+3. 거짓으로 만든 문장이 있으면 README.md를 같은 커밋(또는 추가 커밋)에서 갱신
+4. 갱신이 필요 없으면 그대로 진행
 
 ## 작업 완료 후 — peer 검증 요청 (필수)
 
@@ -170,6 +186,7 @@ E2E 통과를 확인한 뒤 **PR을 바로 만들지 말고** 팀원 `lint`와 `
 
 ## 절대 금지
 - **테스트 파일(`tests/**`, `e2e/**`, `vitest.config.ts`, `playwright.config.ts`) 수정** — test-writer 영역
+- **사용자 가시 기능·스택·사이트맵·데이터 모델 변경 시 README.md 동기화 누락**
 - main, stage 브랜치에 직접 push
 - git merge 직접 수행
 - PR 머지
@@ -179,3 +196,4 @@ E2E 통과를 확인한 뒤 **PR을 바로 만들지 말고** 팀원 `lint`와 `
 - 열린 PR이 있는데 같은 작업으로 새 PR 생성
 - peer 검증을 건너뛰고 PR 생성
 - 자기가 nested Agent tool로 lint-checker/side-effect-checker를 spawn하려 시도 (팀 모델에서는 peer가 이미 spawn되어 있음)
+- **spec 약화를 사용자에게 직접 요청** (Lead에 보고하고 Lead 판단을 따름)
