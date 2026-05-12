@@ -1,6 +1,6 @@
 {
-  "id": "612ce14d-1ed8-4cf9-b346-b7165eea9be0",
-  "prevId": "d38a7ba7-3fb9-4286-8fd2-8cbfe1cb40ce",
+  "id": "9b3e5a2c-6d1f-4e8a-b2c3-1a4b5c6d7e8f",
+  "prevId": "7c2d8e1f-4a3b-5e2d-9f1c-8e7d6c5b4a3f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -119,10 +119,35 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "users_google_id_unique": {
+          "name": "users_google_id_unique",
+          "columns": [
+            {
+              "expression": "google_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"users\".\"google_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

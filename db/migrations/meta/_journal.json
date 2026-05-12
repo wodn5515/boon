@@ -15,6 +15,20 @@
       "when": 1778564194991,
       "tag": "0001_friends",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778564195000,
+      "tag": "0002_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778564195100,
+      "tag": "0003_users_unique",
+      "breakpoints": true
     }
   ]
 }
