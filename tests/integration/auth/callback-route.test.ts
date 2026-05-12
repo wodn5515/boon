@@ -33,7 +33,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 // drizzle db mock — onConflictDoNothing 체인까지 호출 추적
 const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
-const insertValues = vi.fn(() => ({ onConflictDoNothing }));
+const insertValues = vi.fn<(values: Record<string, unknown>) => unknown>(() => ({ onConflictDoNothing }));
 const dbInsert = vi.fn(() => ({ values: insertValues }));
 
 vi.mock("@/db/client", () => ({
