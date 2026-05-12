@@ -77,3 +77,23 @@ PRD V1 구현의 첫 코드 슬라이스를 시작하면서 다음 두 가지를
   8. excel-import — 컬럼 매핑·매칭·일괄 import
   9. friend-detail — `/friends/[id]` 타임라인·통계·생일 D-N
 - 다음 슬라이스(auth-google-oauth)부터 TDD 게이트·디자이너 게이트 모두 정상 적용.
+
+---
+
+## 추가 결정 (auth 슬라이스 시작 시 append, 2026-05-12)
+
+PR #1 머지 후 다음 슬라이스 진입 시점에 처리하기로 미뤘던 두 가지를 정식 결정으로 남긴다.
+
+### 추가-1: `lucide-react` 채택 (shadcn 기본 의존)
+shadcn `radix-nova` preset이 button·dialog 등에서 `lucide-react` 아이콘을 기본으로 사용한다. 의존성은 worker 자율 추가가 아닌 shadcn CLI가 따라온 결과 — sfx 라운드 1에서 "결정 로그에 명시" 권고를 받았다. 채택 사유:
+- shadcn nova preset의 기본 아이콘 셋이라 단일 패키지로 통일하는 게 자연스러움
+- 트리쉐이킹 잘 됨 (named import per icon)
+
+다른 아이콘 패키지(heroicons, tabler 등) 도입 시 결정 로그 추가.
+
+### 추가-2: `vitest.setup.ts` 루트 위치 = 정식 정책
+worker가 부트스트랩 슬라이스에서 `vitest.setup.ts`를 루트에 둔 회피를 그대로 정책으로 굳힌다.
+- worker 영역(인프라 설정·도구 config) vs test-writer 영역(`tests/**`, `e2e/**`의 spec)을 깨끗하게 분리하기 위함
+- 향후 다른 setup 파일도 동일 패턴: `playwright.setup.ts` (필요 시), `db/seed.ts` (필요 시) 모두 루트 또는 도구 디렉토리. `tests/setup.ts` 같은 형태는 사용 금지
+
+이 정책은 AGENTS.md §3 권한 표의 "테스트 도구 설정 파일은 worker 권한"이라는 해석을 강화한다 — 별도 AGENTS.md 갱신 없이 본 결정 로그가 근거.
