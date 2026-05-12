@@ -124,6 +124,7 @@ PR #1 머지 코멘트(https://github.com/wodn5515/boon/pull/1#issuecomment-4426
 
 **즉시 반영**:
 - **🟡 #2 `getAppUrl()` production silent fail**: `process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"` 폴백 제거 → `requireEnv("NEXT_PUBLIC_APP_URL")` 으로 통일. `.env.example` 에 `NEXT_PUBLIC_APP_URL=http://localhost:3000` 기본값 채워 로컬 자동 동작. `playwright.config.ts` env 주입에 NEXT_PUBLIC_APP_URL 추가. production 누락 시 즉시 throw 로 가시화.
+  - **정확한 fail-fast 흐름** (sfx 라운드 3 🟢 #1 보강): production 에서 `NEXT_PUBLIC_APP_URL` 누락 시 `getAppUrl()` throw 가 `signInWithOAuth` 호출 *이전*에 발생한다. `app/login/actions.ts` Server Action 에 try/catch 가 없으므로 예외는 그대로 Next.js error boundary (root `app/error.tsx` 미정의 상태에선 Next 기본 500 페이지) 로 떨어진다 → loud fail. 카드 안의 `?error=oauth_init` alert 카피 경로는 `signInWithOAuth` 가 정상 반환하면서 `data.url` 누락/`error` 채워진 케이스에만 표시된다. silent localhost redirect 보다 가시성 우선이 의도된 트레이드오프.
 - **🟢 #4 callback exchange 실패 서버 로그**: `console.error("[auth/callback] exchange failed", { code, status, hasUser })` 한 줄 추가. error.message 는 PII 우려로 제외. Supabase SDK 버전 호환 위해 옵셔널 체이닝 + 타입 가드.
 - **🟢 #3 `provider === null` 통과 명시**: §B 의 provider/email 가정 항목에 한 줄 append — mock 호환 의도임을 명시. production 도달 확인용 `console.warn` 도입은 friends-crud 슬라이스 결정.
 - **§J deferred 3건 추가**: 테스트 typecheck 인프라(우선순위 1), env 헬퍼 strict 일괄 전환, callback exchange 에러 코드별 분기.
