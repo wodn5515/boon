@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * Google OAuth 콜백 핸들러.
  *
- * 흐름 (결정 로그 003 §A·§B + 004 §J-3·§J-6·§J-7):
+ * 흐름 (결정 로그 003 §A·§B + 004 §J-3·§J-7):
  *   1. `code` 쿼리 파라미터 부재 → `/login?error=missing_code` 로 302.
  *   2. 정상 `code`:
  *      - Supabase `exchangeCodeForSession(code)` 로 세션 교환.
@@ -18,12 +18,9 @@ import { createClient } from "@/lib/supabase/server";
  *      - 교환 결과의 user 정보를 `users` 테이블에 `onConflictDoNothing()` upsert.
  *      - `/` 로 302.
  *
- * J-6 변경 (Lead 보류): `@/db/client` / `@/db/schema/users` 를 static import 로 환원하려 했으나
- *   기존 `tests/integration/auth/callback-route.test.ts` 의 vi.mock factory hoisting 한계로
- *   static import 시 "Cannot access 'dbInsert' before initialization" 이 발생.
- *   spec 수정은 worker 영역이 아니므로 (test-writer 영역) 본 PR 에서는 dynamic import 를 유지.
- *   spec 을 `vi.hoisted()` 패턴 또는 pglite 통합으로 갱신하는 결정은 Lead 후속 자율 판단.
- * J-7 변경: 에러 객체 캐스트를 `import type { AuthError }` 로 통일.
+ * `@/db/client` / `@/db/schema/users` 는 dynamic import 다 — 통합 테스트의 vi.mock factory
+ * hoisting 호환을 위함 (결정 로그 003 §J 및 004 §J-6). static 환원은 별도 슬라이스에서
+ * `getDb()` lazy factory 패턴 도입 시 재검토.
  */
 
 const RECOVERABLE_HTTP_STATUSES = new Set([400, 401, 403, 404, 408, 410, 429]);
@@ -95,7 +92,6 @@ export async function GET(request: Request) {
   const googleId =
     typeof user.user_metadata?.sub === "string" ? user.user_metadata.sub : null;
 
-  // dynamic import — 위 주석 참고. spec hoisting 제약 해소 시 static 으로 환원.
   const { db } = await import("@/db/client");
   const { users } = await import("@/db/schema/users");
 
