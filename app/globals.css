@@ -1,0 +1,115 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * Boon 디자인 시스템
+ * PRD §6 기준: 베이지/크림 베이스 + 초록·연두 톤, 회상 노트 + 자연 메타포.
+ * V1은 라이트 모드 전용 (다크 모드 V2에서 도입).
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-pretendard), "Pretendard Variable", Pretendard, system-ui,
+    -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Boon 브랜드 컬러 (PRD §6) */
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-lime: var(--brand-lime);
+  --color-brand-light: var(--brand-light);
+
+  /* 카테고리 컬러 (💰물질 / ⏰시간·행동 / 💝마음) */
+  --color-cat-material: var(--cat-material);
+  --color-cat-time: var(--cat-time);
+  --color-cat-mind: var(--cat-mind);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* 베이스 톤 */
+  --background: #faf7f0;       /* 크림 베이지 */
+  --foreground: #1f2937;       /* 본문 텍스트 (그레이-800) */
+
+  /* 카드/팝오버 */
+  --card: #ffffff;
+  --card-foreground: #1f2937;
+  --popover: #ffffff;
+  --popover-foreground: #1f2937;
+
+  /* 브랜드 (초록 메인) */
+  --brand-primary: #22c55e;
+  --brand-lime: #84cc16;
+  --brand-light: #4ade80;
+
+  /* 카테고리 */
+  --cat-material: var(--brand-primary);
+  --cat-time: var(--brand-lime);
+  --cat-mind: var(--brand-light);
+
+  /* shadcn 시맨틱 컬러 (브랜드 톤으로 보정) */
+  --primary: #22c55e;
+  --primary-foreground: #ffffff;
+  --secondary: #f1ebe1;         /* 베이지보다 살짝 짙은 보조 */
+  --secondary-foreground: #1f2937;
+  --muted: #f5efe4;
+  --muted-foreground: #78716c;  /* 스톤-500 */
+  --accent: #ecfccb;             /* 라임 매우 옅게 */
+  --accent-foreground: #1f2937;
+  --destructive: #ef4444;
+
+  --border: #e7e2d4;
+  --input: #e7e2d4;
+  --ring: #22c55e;
+
+  --chart-1: #22c55e;
+  --chart-2: #84cc16;
+  --chart-3: #4ade80;
+  --chart-4: #a3e635;
+  --chart-5: #16a34a;
+
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
