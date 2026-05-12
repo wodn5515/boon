@@ -1,12 +1,12 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/client";
 import { friends } from "@/db/schema/friends";
 import { isE2EBypassEnabled } from "@/lib/auth/bypass";
 import { getCurrentUser } from "@/lib/auth/user";
+import { safeRevalidate } from "@/lib/server/revalidate";
 
 /**
  * 친구 CRUD Server Action (결정 로그 004 §B).
@@ -25,21 +25,7 @@ import { getCurrentUser } from "@/lib/auth/user";
  * revalidatePath 도 동일 위험이 있어 try/catch 로 흡수한다 (캐시 무효화는 best-effort).
  */
 
-function safeRevalidate(path: string): void {
-  try {
-    revalidatePath(path);
-  } catch (e) {
-    // 통합 테스트(Next request store 밖) 등 비-요청 컨텍스트에서는 무시.
-    // 005 §I-6 / PR #3 🟢 #5: production 에서는 가시화 로그 — 캐시 무효화 실패가 운영에서
-    // 사일런트 되면 stale UI 회귀가 디버깅 어려움. 로컬·테스트는 그대로 silent.
-    if (process.env.NODE_ENV === "production") {
-      console.warn("[friends/actions] revalidate failed", {
-        path,
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-}
+const SCOPE = "friends/actions";
 
 class UnauthenticatedError extends Error {
   constructor() {
@@ -129,7 +115,7 @@ export async function createFriend(formData: FormData): Promise<void> {
     });
   }
 
-  safeRevalidate("/friends");
+  safeRevalidate("/friends", SCOPE);
 }
 
 /**
@@ -172,8 +158,8 @@ export async function updateFriend(formData: FormData): Promise<void> {
       .where(and(eq(friends.id, rawId), eq(friends.user_id, userId)));
   }
 
-  safeRevalidate("/friends");
-  safeRevalidate(`/friends/${rawId}`);
+  safeRevalidate("/friends", SCOPE);
+  safeRevalidate(`/friends/${rawId}`, SCOPE);
 }
 
 /**
@@ -198,5 +184,5 @@ export async function deleteFriend(id: string): Promise<void> {
       .where(and(eq(friends.id, id), eq(friends.user_id, userId)));
   }
 
-  safeRevalidate("/friends");
+  safeRevalidate("/friends", SCOPE);
 }
