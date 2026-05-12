@@ -154,6 +154,17 @@ export function e2eDeleteCategory(id: string): void {
   store.delete(id);
 }
 
+/**
+ * E2E 인프라 reset (006 §J Lead 결정).
+ *
+ * `/api/_test/reset` 가 호출하는 store 초기화 헬퍼. 모든 카테고리를 비운 뒤
+ * 기본 카테고리 3개(💰물질/⏰시간·행동/💝마음) 를 재시드해 callback handler 초기 상태로 복원.
+ */
+export function resetE2ECategoriesStore(): void {
+  store.clear();
+  ensureSeeded();
+}
+
 export function e2eReorderCategory(
   id: string,
   direction: "up" | "down",

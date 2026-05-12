@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth/user";
 import { listCategories } from "@/lib/categories/queries";
+import { countEntriesByCategory } from "@/lib/entries/category-counts";
 import type { Category as UiCategory } from "@/lib/categories/types";
 
 export const metadata: Metadata = {
@@ -37,14 +38,15 @@ export const metadata: Metadata = {
  *   - entry_count 는 entries 슬라이스에서 결합. V1 골격에선 0 placeholder.
  */
 export default async function SettingsPage() {
-  const [user, dbCategories] = await Promise.all([
+  const [user, dbCategories, entryCounts] = await Promise.all([
     getCurrentUser(),
     listCategories(),
+    countEntriesByCategory(),
   ]);
   // layout 에서 redirect 처리하지만 ts narrowing 을 위해 추가 가드.
   const email = user?.email ?? null;
 
-  // DB row → UI 도메인 타입 매핑. entry_count 는 entries 슬라이스 전까지 0 placeholder.
+  // DB row → UI 도메인 타입 매핑. entry_count 는 entries 슬라이스에서 결합 (006 §F).
   const categories: UiCategory[] = dbCategories.map((c) => ({
     id: c.id,
     name: c.name,
@@ -52,8 +54,17 @@ export default async function SettingsPage() {
     color: c.color,
     is_system: c.is_system,
     sort_order: c.sort_order,
-    entry_count: 0,
+    entry_count: entryCounts.get(c.id) ?? 0,
   }));
+
+  // 006 §J-2 / PR #4 🟡 #2: isFirst/isLast 를 "시스템 그룹" / "사용자 그룹" 경계 기준으로 계산.
+  // categories 는 SQL ORDER BY (is_system DESC, sort_order ASC) 로 시스템이 먼저 오는 구조.
+  // 사용자 그룹의 첫 카테고리의 "위로 이동" 이 disabled, 사용자 그룹 마지막의 "아래로 이동" 이 disabled.
+  const userStartIdx = categories.findIndex((c) => !c.is_system);
+  const lastSystemIdx =
+    userStartIdx === -1 ? categories.length - 1 : userStartIdx - 1;
+  const lastIdx = categories.length - 1;
+  // 사용자 카테고리만 있을 수도 있는데 (시드 누락 등) 그 경우는 userStartIdx=0 으로 자연 처리됨.
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
@@ -96,16 +107,33 @@ export default async function SettingsPage() {
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {categories.map((c, i) => (
-                <CategoryItem
-                  key={c.id}
-                  category={c}
-                  isFirst={i === 0}
-                  isLast={i === categories.length - 1}
-                  // entryCount 는 entries 슬라이스에서 결합. V1 골격에선 0 placeholder.
-                  entryCount={0}
-                />
-              ))}
+              {categories.map((c, i) => {
+                // 그룹 경계: 시스템 그룹은 0..lastSystemIdx, 사용자 그룹은 userStartIdx..lastIdx.
+                const isFirst = c.is_system
+                  ? i === 0
+                  : i === userStartIdx;
+                const isLast = c.is_system
+                  ? i === lastSystemIdx
+                  : i === lastIdx;
+                // 사용자 카테고리 삭제 시 이전 대상 = 같은 사용자 그룹의 다른 카테고리.
+                // 시스템 카테고리로 이전하면 의미는 통하지만 사용자 자유 카테고리만 이전 풀로 둔다
+                // (디자이너 결정 005 §F + 006 §F: 같은 그룹 내 이전).
+                const migrateTargets = categories.filter(
+                  (other) =>
+                    other.id !== c.id &&
+                    other.is_system === c.is_system,
+                );
+                return (
+                  <CategoryItem
+                    key={c.id}
+                    category={c}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                    entryCount={c.entry_count}
+                    migrateTargets={migrateTargets}
+                  />
+                );
+              })}
             </ul>
           )}
         </CardContent>

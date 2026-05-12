@@ -1,13 +1,15 @@
 "use server";
 
 import { and, eq, max, sql } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db/client";
 import { categories } from "@/db/schema/categories";
+import { entries } from "@/db/schema/entries";
 import { isE2EBypassEnabled } from "@/lib/auth/bypass";
 import { getCurrentUser } from "@/lib/auth/user";
+import { safeRevalidate } from "@/lib/server/revalidate";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -29,21 +31,7 @@ import { createClient } from "@/lib/supabase/server";
  */
 
 const USER_CATEGORY_LIMIT = 20;
-
-function safeRevalidate(path: string): void {
-  try {
-    revalidatePath(path);
-  } catch (e) {
-    // 통합 테스트(Next request store 밖) 등 비-요청 컨텍스트에서는 무시.
-    // 005 §I-6: production 환경에서만 가시화 로그 (PR #3 🟢 #5).
-    if (process.env.NODE_ENV === "production") {
-      console.warn("[settings/actions] revalidate failed", {
-        path,
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-}
+const SCOPE = "settings/actions";
 
 class UnauthenticatedError extends Error {
   constructor() {
@@ -100,7 +88,7 @@ export async function createCategory(formData: FormData): Promise<void> {
   if (isE2EBypassEnabled()) {
     const { e2eCreateCategory } = await import("@/lib/categories/e2e-store");
     e2eCreateCategory({ name, icon, color });
-    safeRevalidate("/settings");
+    safeRevalidate("/settings", SCOPE);
     return;
   }
 
@@ -139,7 +127,7 @@ export async function createCategory(formData: FormData): Promise<void> {
     sort_order: nextOrder,
   });
 
-  safeRevalidate("/settings");
+  safeRevalidate("/settings", SCOPE);
 }
 
 /**
@@ -161,7 +149,7 @@ export async function updateCategory(formData: FormData): Promise<void> {
   if (isE2EBypassEnabled()) {
     const { e2eUpdateCategory } = await import("@/lib/categories/e2e-store");
     e2eUpdateCategory({ id: rawId, name, icon, color });
-    safeRevalidate("/settings");
+    safeRevalidate("/settings", SCOPE);
     return;
   }
 
@@ -178,7 +166,7 @@ export async function updateCategory(formData: FormData): Promise<void> {
 
   if (!existing) {
     // 다른 user 의 카테고리거나 존재하지 않음 — 조용히 종료 (RLS 단독 회귀와 정합).
-    safeRevalidate("/settings");
+    safeRevalidate("/settings", SCOPE);
     return;
   }
 
@@ -194,7 +182,7 @@ export async function updateCategory(formData: FormData): Promise<void> {
       and(eq(categories.id, rawId), eq(categories.user_id, userId)),
     );
 
-  safeRevalidate("/settings");
+  safeRevalidate("/settings", SCOPE);
 }
 
 /**
@@ -213,8 +201,18 @@ export async function deleteCategory(args: {
 
   if (isE2EBypassEnabled()) {
     const { e2eDeleteCategory } = await import("@/lib/categories/e2e-store");
+    const { e2eCountEntriesByCategory, e2eMigrateEntriesCategory } =
+      await import("@/lib/entries/e2e-store");
+    // E2E 분기에서도 본격 결합: 묶인 entries 가 있으면 migrateTo 필수.
+    const count = e2eCountEntriesByCategory(args.id);
+    if (count > 0) {
+      if (!args.migrateTo) {
+        throw new Error("이전할 카테고리를 선택해 주세요.");
+      }
+      e2eMigrateEntriesCategory(args.id, args.migrateTo);
+    }
     e2eDeleteCategory(args.id);
-    safeRevalidate("/settings");
+    safeRevalidate("/settings", SCOPE);
     return;
   }
 
@@ -231,7 +229,7 @@ export async function deleteCategory(args: {
 
   if (!existing) {
     // 다른 user 의 카테고리거나 존재하지 않음 — silent. RLS 단독 회귀와 정합.
-    safeRevalidate("/settings");
+    safeRevalidate("/settings", SCOPE);
     return;
   }
 
@@ -239,15 +237,67 @@ export async function deleteCategory(args: {
     throw new Error("기본 카테고리는 삭제할 수 없어요.");
   }
 
-  // entries 슬라이스 결합 전엔 entryCount === 0 placeholder 라 migrateTo 미사용.
-  // entries 슬라이스에서 트랜잭션으로 일괄 update + delete 결합 예정.
-  await db
-    .delete(categories)
+  // 006 §F: 묶인 entries 가 있으면 강제 이전 필수.
+  // FK 제약(ON DELETE RESTRICT) 으로도 막히지만 application-layer 에서 먼저 사용자 친화 throw.
+  const [entryCountRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(entries)
     .where(
-      and(eq(categories.id, args.id), eq(categories.user_id, userId)),
+      and(
+        eq(entries.user_id, userId),
+        eq(entries.category_id, args.id),
+      ),
     );
+  const entryCount = Number(entryCountRow?.count ?? 0);
 
-  safeRevalidate("/settings");
+  if (entryCount > 0) {
+    if (!args.migrateTo) {
+      throw new Error("이전할 카테고리를 선택해 주세요.");
+    }
+    // 이전 대상 카테고리도 본인 소유 + 자기 자신이 아닌지 확인.
+    if (args.migrateTo === args.id) {
+      throw new Error("같은 카테고리로 이전할 수 없어요.");
+    }
+    const [migrateTarget] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(
+        and(
+          eq(categories.id, args.migrateTo),
+          eq(categories.user_id, userId),
+        ),
+      )
+      .limit(1);
+    if (!migrateTarget) {
+      throw new Error("이전할 카테고리를 찾을 수 없어요.");
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(entries)
+        .set({ category_id: args.migrateTo!, updated_at: new Date() })
+        .where(
+          and(
+            eq(entries.user_id, userId),
+            eq(entries.category_id, args.id),
+          ),
+        );
+      await tx
+        .delete(categories)
+        .where(
+          and(eq(categories.id, args.id), eq(categories.user_id, userId)),
+        );
+    });
+  } else {
+    await db
+      .delete(categories)
+      .where(
+        and(eq(categories.id, args.id), eq(categories.user_id, userId)),
+      );
+  }
+
+  safeRevalidate("/settings", SCOPE);
+  safeRevalidate("/", SCOPE);
 }
 
 /**
@@ -269,7 +319,7 @@ export async function reorderCategory(
   if (isE2EBypassEnabled()) {
     const { e2eReorderCategory } = await import("@/lib/categories/e2e-store");
     e2eReorderCategory(id, direction);
-    safeRevalidate("/settings");
+    safeRevalidate("/settings", SCOPE);
     return;
   }
 
@@ -326,7 +376,7 @@ export async function reorderCategory(
       );
   });
 
-  safeRevalidate("/settings");
+  safeRevalidate("/settings", SCOPE);
 }
 
 /**
@@ -347,6 +397,28 @@ export async function signOut(): Promise<void> {
       console.warn("[settings/actions] signOut failed", {
         error: e instanceof Error ? e.message : String(e),
       });
+    } finally {
+      // 006 §J-1 / PR #4 🟡 #1: Supabase API 가 throw 하더라도 사용자가 의도한 "로그아웃" 이
+      // 사일런트로 무효화되면 안 된다. cookie 를 강제 삭제해 다음 요청이 비인증 상태로 출발하도록.
+      // Supabase SSR 의 auth cookie 이름 규약 `sb-<ref>-auth-token` 만 정리한다 (다른 쿠키 영향 없음).
+      try {
+        const cookieStore = await cookies();
+        for (const c of cookieStore.getAll()) {
+          if (c.name.startsWith("sb-") && c.name.endsWith("-auth-token")) {
+            cookieStore.delete(c.name);
+          }
+        }
+      } catch (cookieErr) {
+        // 통합 테스트 등 비-요청 컨텍스트에서는 cookies() 가 throw — silent.
+        if (process.env.NODE_ENV === "production") {
+          console.warn("[settings/actions] cookie cleanup failed", {
+            error:
+              cookieErr instanceof Error
+                ? cookieErr.message
+                : String(cookieErr),
+          });
+        }
+      }
     }
   }
   // redirect 는 NEXT_REDIRECT 를 throw — server action 의 정상 종료 흐름.

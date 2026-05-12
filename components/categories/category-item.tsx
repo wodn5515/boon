@@ -33,6 +33,8 @@ type CategoryItemProps = {
   isLast?: boolean;
   /** worker 가 결합. 결합 전엔 항상 0 placeholder. */
   entryCount?: number;
+  /** 카테고리 삭제 시 entries 이전 대상 후보 (006 §F). 사용자 카테고리에서만 의미. */
+  migrateTargets?: Category[];
   /** 외부 주입 가능 (테스트·디자이너 골격용). 미지정 시 reorderCategory Server Action 사용. */
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -44,6 +46,7 @@ export function CategoryItem({
   isFirst = false,
   isLast = false,
   entryCount = 0,
+  migrateTargets,
   onMoveUp,
   onMoveDown,
   className,
@@ -153,6 +156,7 @@ export function CategoryItem({
           <CategoryDeleteDialog
             category={category}
             entryCount={entryCount}
+            migrateTargets={migrateTargets}
             trigger={
               <Button
                 type="button"
