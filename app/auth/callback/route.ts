@@ -115,11 +115,11 @@ export async function GET(request: Request) {
       userId: user.id,
       message,
     });
-    // Postgres unique violation 의 SQLSTATE 23505. drizzle 은 원본 에러를 그대로 throw.
-    const isUniqueViolation =
-      /unique|duplicate key|23505/i.test(message) ||
-      (typeof (e as { code?: string }).code === "string" &&
-        (e as { code?: string }).code === "23505");
+    // Postgres unique violation 의 SQLSTATE 23505. drizzle / postgres-js 는 원본 에러를 그대로
+    // throw 하므로 `e.code` 로 충분히 판별 가능. 메시지 substring 매칭은 false-positive (다른 SDK
+    // 에러에 "unique" 가 우연히 포함) 가능성이 있어 제거 (sfx 라운드 2 🟢 #12).
+    const code = (e as { code?: unknown }).code;
+    const isUniqueViolation = typeof code === "string" && code === "23505";
     const errKind = isUniqueViolation ? "account_conflict" : "upsert_failed";
     return NextResponse.redirect(
       new URL(`/login?error=${errKind}`, url),
