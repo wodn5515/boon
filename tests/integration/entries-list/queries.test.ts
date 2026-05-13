@@ -231,7 +231,7 @@ describe("lib/entries-list/queries::listEntriesFiltered", () => {
            ($1, $2, $3, '이사 도와줌 keepwordABC', '2026-05-10', 'anytime', false),
            ($1, $2, $3, 'KEEPWORDabc 두번째', '2026-05-11', 'anytime', false),
            ($1, $2, $3, '그냥 평범한 메모', '2026-05-12', 'anytime', false),
-           ($1, $2, $3, '와일드카드 100%% 매칭 metoo', '2026-05-13', 'anytime', false),
+           ($1, $2, $3, '와일드카드 100% 매칭 metoo', '2026-05-13', 'anytime', false),
            ($1, $2, $3, '와일드카드 1009 metoo', '2026-05-14', 'anytime', false)`,
         [USER_A, a.friendIds.keep, a.categoryIds.material],
       );
