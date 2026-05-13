@@ -80,6 +80,12 @@ export function ImportStepper({ current, onStepClick }: ImportStepperProps) {
           // 클릭 가능한 과거 단계만 <button> — 현재/미래는 <div>로 두어 step 라벨이
           // role="button" 매칭에 섞이지 않도록 한다 (test getByRole 회귀: 시나리오 2~6).
           // a11y: 클릭 비활성 step 은 정적 시각화이므로 button 일 필요 없음.
+          //
+          // 결정 로그 011 §B-5 — 비활성 단계(미래 단계 + onStepClick 미지정 시 과거 단계) 는
+          //   `aria-disabled="true"` + `cursor-not-allowed` 로 명시한다. 스크린리더 / 마우스
+          //   호버 양쪽으로 "지금 클릭이 안 되는 단계" 라는 신호를 노출 (PR #8 🟢 #2 청산).
+          //   현재 단계는 진행 중 상태이므로 aria-disabled X (aria-current="step" 만).
+          const isDisabledLook = !isClickable && !isCurrent;
           const inner = isClickable ? (
             <button
               type="button"
@@ -95,8 +101,10 @@ export function ImportStepper({ current, onStepClick }: ImportStepperProps) {
           ) : (
             <div
               aria-current={isCurrent ? "step" : undefined}
+              aria-disabled={isDisabledLook ? true : undefined}
               className={cn(
                 "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left",
+                isDisabledLook && "cursor-not-allowed",
               )}
             >
               {badge}
