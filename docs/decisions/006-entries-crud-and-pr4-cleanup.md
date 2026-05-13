@@ -161,6 +161,58 @@ worker가 reset fixture 통합 후 `npm run test:e2e` 재실행에서 **로컬 �
 ### V2 메모 추가
 - **per-test session ID 기반 e2e-store namespace** (멀티-워커 격리 + 속도 회복) — V2 또는 별도 슬라이스. dashboard-widgets·excel-import 후 정리 가치
 
+---
+
+## 사용자 PR #5 종합 리뷰 응대 (2026-05-13, append)
+
+사용자 리뷰(https://github.com/wodn5515/boon/pull/5#issuecomment-4435985005)에서 5건 코멘트 + "머지 가능 ✅" 판정 + **V1 핵심 entity 4종 완료 마일스톤 평가**. 모두 dashboard-widgets 또는 V1 마무리 메타로 **deferred** — 이번 PR 추가 라운드 없음.
+
+### 사용자 명시 평가 (V1 핵심 도메인 마일스톤)
+> "이번 슬라이스로 V1 핵심 entity 4종(users·friends·categories·entries) 모두 정정-1 패턴 + RLS + 강제 이전 정책까지 결합 완료. 다음 dashboard-widgets 슬라이스가 새 도메인 추가 없이 '기존 데이터 위에 집계 위젯' 만 얹는 흐름이라 진입이 자연스럽다. PR #4 '부채 청산 + 새 도메인 통합' 운영 원칙이 이번 PR 에도 성공적으로 적용됨 — 결정 로그 006 의 §J (PR #4 6건 청산) + §J-7 (e2e-store 격리 후속) 가 그 증거."
+
+운영 원칙 인계 (007+):
+- V1 데이터 모델 완성 후 진입 흐름이 "도메인 추가" → "집계·검색·import 흐름" 으로 자연 전환됨
+- 정정-1 패턴 + RLS 단독 회귀 + e2e-store 격리 = 3중 안전망 베이스 위에서 dashboard·entries-list·excel-import 진행
+
+### dashboard-widgets 또는 V1 마무리 슬라이스 첫 작업 우선순위 (사용자 권고 5건, 그대로 007 결정 로그로 인계)
+
+1. **🟢 #1 `app/api/%5Ftest/reset/` URL encoding fragility** — 결정 로그 006 §J-7 또는 별도 §K 에 한 줄 명시 ("Next.js private folder convention 우회. encoded segment private 처리 확장 시 라우트 사라질 위험"). 대안 네이밍 후보: `app/api/__internal/test-reset/` 또는 `app/api/dev-reset/` (의미 명확 + production 가드 살아있음). 다음 슬라이스에서 결정 로그 한 줄로 마무리
+
+2. **🟢 #2 `entries.friend_id ON DELETE CASCADE` 의도 명시** — 006 §A 의 entries 스키마 설명에 한 줄 — "V1 friends 는 soft delete 정책이지만 Supabase user 삭제 chain 의 일괄 정리 보장을 위해 CASCADE 채택. friends 의 직접 hard delete 는 V1 에 없음. CASCADE 발동 경로 = user 삭제 chain". `category_id ON DELETE RESTRICT` 와 의도 비대칭이라 명시 가치 큼
+
+3. **🟢 #3 `parseMemo` 공백 trim 통일** — `app/(authenticated)/entries/actions.ts:122-126` 한 줄 수정:
+   ```ts
+   const raw = parseString(formData, "memo", false)
+   return raw.trim().length === 0 ? "" : raw
+   ```
+   공백 1자 이상 입력 시 빈 문자열로 통일. 회상 노트 톤에서 "빈 카드 위장" 방지. dashboard-widgets "신세 빠른 추가" 흐름에서 같은 컨텍스트로 묶음 가능
+
+4. **🟢 #4 `deleteCategory` E2E vs production 분기 대칭화** — production 검사가 application-layer inline, E2E 가 e2e-store 내부. 동작 같지만 검사 위치 비대칭. e2e-store 가 더 커지면 (entries-list·excel-import 후) 같은 인터페이스·같은 검증 순서로 정리하는 단발 cleanup. 지금 spec 으로 회귀 잠금됐으니 미루어도 됨
+
+5. **💬 #5 `countEntriesByCategory` friend.is_deleted 필터 정책** — dashboard-widgets 슬라이스 첫 작업에서 entries 누적 통계 영역 정의 시 한 번에 정리. 옵션: (a) is_deleted=false 필터 추가 (활성 친구의 entries만 카운트, 시각 정합) (b) 현 상태 유지 + 결정 로그 한 줄 명시 ("internal consistency — 카테고리 강제 이전 게이트 동작 일관성을 우선"). dashboard-widgets 슬라이스에서 Lead 자율 판단 + 결정 로그 한 줄
+
+### 머지 차단 사유
+**없음** — 모든 항목이 nit·question 수준. 사용자 명시 "머지 가능 ✅".
+
+### Lead 판단 채택 사유
+- 사용자 권고 그대로 "dashboard-widgets / V1 마무리에서 묶음" 채택. 20 커밋의 큰 PR이라 깔끔히 머지
+- V1 핵심 도메인 완료 마일스톤 — 다음 슬라이스부터 작업 결이 "새 도메인" 에서 "기존 데이터 활용" 으로 전환되어, nit 5건이 그 흐름에 자연스럽게 흡수됨
+- 결정 로그 006 트레이스 보존으로 dashboard-widgets 진입 시 점검 누락 없음
+
+### V1 진행 현황 (5/5 핵심 도메인 슬라이스 마지막)
+- ✅ PR #1: Next.js 부트스트랩
+- ✅ PR #2: Google OAuth + Supabase + users
+- ✅ PR #3: 친구 CRUD + 인프라 부채 청산
+- ✅ PR #4: 카테고리 CRUD + /settings + PR #3 잔여 청산
+- ✅ PR #5 (본 PR): **신세 CRUD + 카테고리 강제 이전 + PR #4 잔여 청산 + e2e 격리 인프라**
+
+### V1 잔여 슬라이스 (사용자 권고 순서)
+- (6) **dashboard-widgets** — 메인 대시보드 위젯 5종 (디자이너 게이트 필수). 본 PR 사용자 리뷰 5건 흡수
+- (7) entries-list — `/entries` 검색·필터·날짜 범위
+- (8) excel-import — 컬럼 매핑·매칭·일괄 import
+- (9) friend-detail 통계 — 차트·생일 D-N 결합 (또는 dashboard와 묶음 가능)
+- (10) V1 마무리 `/meta` — Playwright CI 빌드 모드 분기, eslint flat config, nonce strict CSP
+
 ## 근거
 
 - **entries 본격 도입**: V1 핵심 도메인 entity. friends·categories 결합 + 보답 시점 4종 비즈니스 룰 + 인라인 친구 빠른 생성 → V1에서 가장 복잡한 슬라이스. 베이스 인프라(정정-1, pglite, RLS 단독 회귀)가 안정된 PR #4 위에서 자연 진입
