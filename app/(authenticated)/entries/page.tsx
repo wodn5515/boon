@@ -1,0 +1,206 @@
+import type { Metadata } from "next";
+import { Upload } from "lucide-react";
+
+import { updateEntry, deleteEntry } from "@/app/(authenticated)/entries/actions";
+import { EntriesFilterBar } from "@/components/entries/entries-filter-bar";
+import { EntryItem } from "@/components/entries/entry-item";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  MOCK_CATEGORY_OPTIONS,
+  MOCK_FRIEND_OPTIONS,
+} from "@/lib/entries-list/mock";
+import {
+  listEntriesFiltered,
+  type EntriesSort,
+} from "@/lib/entries-list/queries";
+
+export const metadata: Metadata = {
+  title: "받은 신세 · Boon",
+  description: "받은 신세를 한곳에 모아 검색하고 회상합니다.",
+};
+
+/**
+ * `/entries` — 받은 신세 리스트·검색 페이지 (PRD §3, §5, 결정 로그 008).
+ *
+ * Server Component. middleware + (authenticated)/layout 이 인증 게이트 통과시킨 후 진입.
+ *
+ * URL searchParams (008 §B):
+ *   - q          메모 텍스트 검색 (case-insensitive substring)
+ *   - friend     friend_id
+ *   - category   category_id
+ *   - from / to  ISO YYYY-MM-DD (받은 날짜 범위, 포함)
+ *   - sort       "recent" (기본) / "oldest"
+ *
+ * 디자이너 라운드 — listEntriesFiltered() 는 mock 위 골격 필터. worker 라운드에서 SQL 본체로 교체.
+ *
+ * 위젯 A 결합 (008 §H): 메인 대시보드 위젯 A 의 `viewAllHref` 가 이미 `/entries` 라
+ * 본 페이지 신설만으로 클릭 → 진입 자동 결합.
+ */
+
+type EntriesPageProps = {
+  // Next.js 15: searchParams 는 Promise.
+  searchParams: Promise<{
+    q?: string | string[];
+    friend?: string | string[];
+    category?: string | string[];
+    from?: string | string[];
+    to?: string | string[];
+    sort?: string | string[];
+  }>;
+};
+
+const LIST_ID = "entries-list";
+const RESULT_COUNT_ID = "entries-result-count";
+
+function pickFirst(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return (value[0] ?? "").trim();
+  return (value ?? "").trim();
+}
+
+function parseSort(raw: string): EntriesSort {
+  return raw === "oldest" ? "oldest" : "recent";
+}
+
+function parseDate(raw: string): string {
+  // YYYY-MM-DD 형식만 허용 — 잘못된 입력은 빈 문자열로 무시.
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
+}
+
+export default async function EntriesPage({ searchParams }: EntriesPageProps) {
+  const params = await searchParams;
+
+  const q = pickFirst(params.q);
+  const friend = pickFirst(params.friend);
+  const category = pickFirst(params.category);
+  const from = parseDate(pickFirst(params.from));
+  const to = parseDate(pickFirst(params.to));
+  const sort = parseSort(pickFirst(params.sort));
+
+  // mock 결합 — worker 라운드에서 listFriends() / listCategories() 결과로 교체.
+  const friendOptions = MOCK_FRIEND_OPTIONS;
+  const categoryOptions = MOCK_CATEGORY_OPTIONS;
+
+  const entries = await listEntriesFiltered({
+    q: q || undefined,
+    friendId: friend || undefined,
+    categoryId: category || undefined,
+    from: from || undefined,
+    to: to || undefined,
+    sort,
+  });
+
+  const hasAnyFilter =
+    q !== "" ||
+    friend !== "" ||
+    category !== "" ||
+    from !== "" ||
+    to !== "" ||
+    sort !== "recent";
+
+  return (
+    <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+      {/* 헤더 */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">
+            받은 신세
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            받은 마음을 한곳에 모아 차분히 돌아봐요.
+          </p>
+        </div>
+        {/* 엑셀 import 진입점 — 다음 슬라이스에서 실제 페이지/모달 결합 (008 §A). */}
+        <Button
+          asChild
+          variant="outline"
+          size="lg"
+          className="gap-1.5"
+          aria-label="엑셀 가져오기"
+        >
+          <a href="/entries/import" aria-disabled="true" title="다음 슬라이스에서 결합 예정">
+            <Upload aria-hidden />
+            엑셀 가져오기
+          </a>
+        </Button>
+      </div>
+
+      {/* 필터 바 (검색·친구·카테고리·날짜·정렬·초기화) */}
+      <EntriesFilterBar
+        initialQuery={q}
+        initialFriendId={friend}
+        initialCategoryId={category}
+        initialFrom={from}
+        initialTo={to}
+        initialSort={sort}
+        friendOptions={friendOptions}
+        categoryOptions={categoryOptions}
+        targetListId={LIST_ID}
+        resultCountTargetId={RESULT_COUNT_ID}
+      />
+
+      {/* 결과 영역 */}
+      {entries.length === 0 ? (
+        <EmptyEntries hasFilter={hasAnyFilter} />
+      ) : (
+        <section className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <p
+              id={RESULT_COUNT_ID}
+              className="text-xs text-muted-foreground"
+              aria-live="polite"
+            >
+              {entries.length}건 표시 중
+            </p>
+          </div>
+          <ul id={LIST_ID} className="flex flex-col gap-2">
+            {entries.map((entry) => (
+              <EntryItem
+                key={entry.id}
+                entry={entry}
+                showFriend
+                friendOptions={friendOptions}
+                categoryOptions={categoryOptions}
+                onUpdateAction={updateEntry}
+                onDeleteAction={deleteEntry}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+    </main>
+  );
+}
+
+/**
+ * 빈 상태 — 필터 결과 없음 vs 데이터 자체 없음 두 분기 (008 §A).
+ *
+ * CLAUDE.md §2 강박 톤 회피 — "받은 신세가 없어요" + FAB 안내.
+ */
+function EmptyEntries({ hasFilter }: { hasFilter: boolean }) {
+  if (hasFilter) {
+    return (
+      <Card className="mt-8 items-center gap-2 bg-accent/40 py-10 text-center">
+        <p className="font-heading text-lg font-medium text-foreground">
+          조건에 맞는 신세가 없어요
+        </p>
+        <p className="max-w-md text-sm text-muted-foreground">
+          검색어나 필터를 바꿔보거나, 필터를 초기화해 보세요.
+        </p>
+        <Button asChild variant="outline" size="sm" className="mt-2">
+          <a href="/entries">필터 초기화</a>
+        </Button>
+      </Card>
+    );
+  }
+  return (
+    <Card className="mt-8 items-center gap-3 bg-accent/40 py-10 text-center">
+      <p className="font-heading text-lg font-medium text-foreground">
+        받은 신세가 없어요
+      </p>
+      <p className="max-w-md text-sm text-muted-foreground">
+        우측 하단의 빠른 입력으로 첫 신세를 기록해 보세요.
+      </p>
+    </Card>
+  );
+}
