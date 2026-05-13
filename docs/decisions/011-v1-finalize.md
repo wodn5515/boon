@@ -153,6 +153,28 @@ V1 머지 완료 후 README 가 반영해야 할 사항:
 - PR 제목: `[chore] V1 마무리 — 잔여 부채 13건 청산 + Vercel 배포 준비 (PR #10 / 011)`
   - `[chore]` prefix — feat 가 아닌 부채 청산 + infra 위주
 
+## §L. test-writer 라운드 채택 (Lead 판단 4건)
+
+test-writer 단발 호출(3f9af86) — 9 spec 선작성, vitest 27 fail / 188 pass, typecheck:tests clean. Lead 판단 4건 모두 채택:
+
+1. **B-1 호스트 TZ 의존**: `process.env.TZ === "Asia/Seoul"` 1건만 항상 빨강, 나머지 2건은 CI 호스트 의존. worker 청산 후 `next.config.ts env.TZ` 적용 + vitest test.env 에 `TZ=Asia/Seoul` 주입으로 일관 명시 잠금 → 채택.
+2. **B-2 e2e spec 회귀 방어선**: 현재 E2E_BYPASS_AUTH 분기에서는 invalid date 가 SQL 까지 안 흘러가 e2e 가 그린. unit 으로 빨강 시드는 충분. e2e spec 은 미래 회귀 방어선으로 유지 → 채택.
+3. **B-4 "10MB" 카피 자유도**: 가드 메시지에 "10MB" 키워드 포함만 잠그고 카피 문구는 worker 자유 → 채택.
+4. **C-3 drizzle `$client` private API 의존**: 메이저 업그레이드 시 깨질 가능성 있으나 V1 마무리 한정 회귀 잠금 가치 충분 → 채택. V2 에서 drizzle 업그레이드 시 재검토.
+
+빨강 시드 27건 분포:
+- B-1: 1 (TZ env) + 2 (KST 의존)
+- B-2: 5 (unit dynamic import throw + e2e 회귀 방어선)
+- B-3: 1 (`extractDigitsKoreanAware` named export 미존재)
+- B-4: 1 (10MB 메시지 미노출)
+- B-5: 1 (aria-disabled/cursor-not-allowed 미노출)
+- C-1: 4 (greeting 모듈 미존재 dynamic import throw)
+- C-2: 6 (format-diff 모듈 미존재 dynamic import throw)
+- C-3: 1 (db.$client.query 6회 호출, 1회 기대)
+- C-4: 5 (1000개월 가드 동작 미일치)
+
+worker 가 청산 후 27 → 0 빨강 전환 + 새로 추가된 그린 188 유지가 본 슬라이스 목표.
+
 ## §K. V2 메모 (본 슬라이스 후 production 운영 중 재논의)
 
 - locale collation (PostgreSQL 한국어 정렬 미세 차이) — V2 사용자 피드백 후
