@@ -34,6 +34,14 @@ import { cn } from "@/lib/utils";
  *   - 보답 시점 배지 = 카테고리 색상 풀과 겹치지 않게 outline 박스. "특정 날짜" 는
  *     formatRepaymentBadge 로 "5.20에" 같은 구체 날짜를 보여준다.
  *   - 갚음 표시 = 좌측 아이콘 위에 체크 오버레이 + 카드 전체 opacity-60.
+ *
+ * 008 §C·§E: `/entries` 페이지의 즉시 클라이언트 필터가 `<li>` data-* 속성 매칭으로
+ *   결과를 즉시 토글한다. 다음 4개 속성을 항상 노출 — 필터 바가 알지 못해도 무해.
+ *     · data-friend-id      — 친구 필터 매칭
+ *     · data-category-id    — 카테고리 필터 매칭
+ *     · data-received-date  — 날짜 범위 매칭 (YYYY-MM-DD 문자열 비교)
+ *     · data-memo           — 메모 텍스트 검색 매칭 (lowercase)
+ *   data-entry-id, data-repaid 는 기존부터 노출. 모든 속성은 시각/접근성에 영향 없음.
  */
 
 type EntryItemProps = {
@@ -73,6 +81,10 @@ export function EntryItem({
     <li
       data-entry-id={entry.id}
       data-repaid={entry.is_repaid ? "true" : "false"}
+      data-friend-id={entry.friend_id}
+      data-category-id={entry.category_id}
+      data-received-date={entry.received_date}
+      data-memo={entry.memo.toLowerCase()}
       className={cn(
         "flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-3 transition-colors",
         "hover:border-foreground/20",
