@@ -66,15 +66,18 @@ export async function getRecentEntries(
 // ============================================================
 
 /**
- * 위젯 B — 신세 많이 받은 친구 그리드 (007 §C).
+ * 위젯 B — 신세 많이 받은 친구 그리드 (007 §C + 결정 로그 011 §C-3).
  *
  * 정렬: 받은 신세 수 DESC, name ASC tiebreak. count=0 친구도 포함 (LEFT JOIN).
  * 각 친구의 가장 최근 entry.memo 한 줄 동봉 (received_date DESC 의 1건).
  * 필터: 본인 user_id + friends.is_deleted=false.
  *
- * 구현 메모:
- *   - 한 쿼리로 친구 + count + recent_memo 까지 가져온다 — 친구 수가 보통 수~수십이라 N+1 부담 없음.
- *   - recent_memo 는 PostgreSQL window function (ROW_NUMBER) 으로 카테고리 굳이 안 따고 entries 만.
+ * 결정 로그 011 §C-3 — N+1 제거:
+ *   - 이전 구현은 친구 + count 집계 1회 + 친구별 최근 메모 N회 = 총 N+1 쿼리.
+ *   - 본 구현은 PR #8 `matchFriendsByName` 패턴 (LEFT JOIN LATERAL) 을 재활용해 단일 SQL.
+ *   - inner subquery 도 `user_id = ${userId}` 명시 — 정정-1 패턴 (CLAUDE.md §10 / 004 §sfx 🔴 #1)
+ *     이 application-layer 양 끝에서 격리됨을 잠금. RLS 가 두 번째 방어선이지만 application 단에서
+ *     명시하면 RLS 가 잠시 비활성된 환경에서도 사일런트 격리 사고를 차단한다.
  *
  * @param limit 노출 건수. 기본 6.
  */
@@ -86,8 +89,13 @@ export async function getTopFriends(
   }
   const userId = await requireUserId();
 
-  // 1) 친구 + count 동시 집계 (LEFT JOIN entries — count=0 친구 보존).
-  //    drizzle 에 friends.user_id 컬럼 매칭 잘못 셀 일 없도록 명시.
+  // 단일 SQL — recent_memo 는 SELECT 절의 scalar subquery 로 인라인.
+  //   - 외부: friends LEFT JOIN entries — count=0 친구 보존 + GROUP BY 집계.
+  //   - scalar subquery: 각 친구의 entries 중 received_date DESC, created_at DESC LIMIT 1 메모.
+  //     subquery 안에서 `entries.user_id = ${userId}` 를 명시 (정정-1).
+  //   - drizzle 의 query builder 위에서 1번의 `$client.query` 만 발생 — N+1 제거 (011 §C-3).
+  //   - LEFT JOIN LATERAL 대신 scalar subquery 채택 사유: GROUP BY 의 recent.memo 추가 의존성을
+  //     피해 의미를 명료하게. 두 방식 모두 단일 쿼리이고 PostgreSQL 옵티마이저가 동등 plan 을 만든다.
   const friendRows = await db
     .select({
       id: friends.id,
@@ -95,6 +103,14 @@ export async function getTopFriends(
       birthday_month: friends.birthday_month,
       birthday_day: friends.birthday_day,
       entry_count: sql<number>`count(${entries.id})::int`,
+      recent_memo: sql<string | null>`(
+        SELECT ${entries.memo}
+        FROM ${entries}
+        WHERE ${entries.friend_id} = ${friends.id}
+          AND ${entries.user_id} = ${userId}
+        ORDER BY ${entries.received_date} DESC, ${entries.created_at} DESC
+        LIMIT 1
+      )`,
     })
     .from(friends)
     .leftJoin(
@@ -117,35 +133,13 @@ export async function getTopFriends(
     )
     .limit(limit);
 
-  if (friendRows.length === 0) return [];
-
-  // 2) 각 친구의 최근 메모 한 줄 — N+1 쿼리. 친구가 보통 6명 이내라 비용 무시 가능.
-  //    raw SQL window function 도 가능하지만 drizzle query builder 의 타입 안정성을 우선.
-  const memoMap = new Map<string, string>();
-  await Promise.all(
-    friendRows.map(async (f) => {
-      const [row] = await db
-        .select({ memo: entries.memo })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.user_id, userId),
-            eq(entries.friend_id, f.id),
-          ),
-        )
-        .orderBy(desc(entries.received_date), desc(entries.created_at))
-        .limit(1);
-      if (row) memoMap.set(f.id, row.memo);
-    }),
-  );
-
   return friendRows.map((f) => ({
     id: f.id,
     name: f.name,
     birthday_month: f.birthday_month,
     birthday_day: f.birthday_day,
     entry_count: Number(f.entry_count ?? 0),
-    recent_memo: memoMap.get(f.id) ?? null,
+    recent_memo: f.recent_memo ?? null,
   }));
 }
 
