@@ -6,11 +6,11 @@ import { WidgetThisMonthSummary } from "@/components/dashboard/widget-this-month
 import { WidgetUpcomingBirthdays } from "@/components/dashboard/widget-upcoming-birthdays";
 import { getCurrentUser } from "@/lib/auth/user";
 import {
-  mockGetRecentEntries,
-  mockGetThisMonthSummary,
-  mockGetTopFriends,
-  mockGetUpcomingBirthdays,
-} from "@/lib/dashboard/mock";
+  getRecentEntries,
+  getThisMonthSummary,
+  getTopFriends,
+  getUpcomingBirthdays,
+} from "@/lib/dashboard/queries";
 
 export const metadata: Metadata = {
   title: "홈 · Boon",
@@ -40,28 +40,21 @@ export const metadata: Metadata = {
  *     - 사용자 도메인에 `name` 컬럼이 없으므로 email 의 `@` 앞부분을 우선 사용.
  *     - 이메일 없으면 "친구" fallback (회상 노트 톤).
  *
- *   - **mock 데이터**: 본 슬라이스는 디자이너 골격이라 lib/dashboard/mock.ts 의 mock 함수로 시연.
- *     worker 가 다음 결합 라운드에서 lib/dashboard/queries.ts 의 placeholder 들을 실제 SQL 로
- *     채우고 import 만 갈아끼우면 된다 (시그니처/반환 타입 동일).
- *
- * worker 결합 포인트 (TODO):
- *   - mockGetRecentEntries(5) → getRecentEntries(5)
- *   - mockGetTopFriends(6) → getTopFriends(6)
- *   - mockGetUpcomingBirthdays(30) → getUpcomingBirthdays(30)
- *   - mockGetThisMonthSummary() → getThisMonthSummary()
- *   - lib/dashboard/mock.ts 파일 삭제
+ *   - **데이터 결합**: 본격 결합 — lib/dashboard/queries.ts 의 4 함수가 정정-1 패턴 + RLS 통과.
+ *     E2E_BYPASS_AUTH 분기는 각 query 내부에서 e2e-store 위로 분기 (시나리오 4 데이터 결합 통과).
+ *     디자이너 골격 단계의 lib/dashboard/mock.ts 는 결정 로그 007 §J 채택대로 본 슬라이스에서 제거.
  */
 export default async function HomePage() {
   const user = await getCurrentUser();
   const greetingName = pickGreetingName(user);
 
-  // === mock 으로 시연 (worker 결합 시점에 lib/dashboard/queries.ts 로 교체) ===
+  // 본격 결합 — 4 함수 모두 application-layer user_id 격리 + e2e-store 분기 포함.
   const [recentEntries, topFriends, upcomingBirthdays, thisMonth] =
     await Promise.all([
-      mockGetRecentEntries(5),
-      mockGetTopFriends(6),
-      mockGetUpcomingBirthdays(30),
-      mockGetThisMonthSummary(),
+      getRecentEntries(5),
+      getTopFriends(6),
+      getUpcomingBirthdays(30),
+      getThisMonthSummary(),
     ]);
 
   return (
