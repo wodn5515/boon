@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { InitialAvatar } from "@/components/ui/initial-avatar";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { formatReceivedDate } from "@/lib/entries/types";
+import { extractDigitsKoreanAware } from "@/lib/import/memo-builder";
 import type {
   MatchResult,
   NormalizedRow,
@@ -487,9 +488,16 @@ function RowBodyMultiple({
   );
 }
 
+/**
+ * Step 4 row 헤더의 금액 표시. 결정 로그 011 §B-3 — buildMemo 와 동일 규약 사용.
+ *
+ * 단일 진실 원천: `lib/import/memo-builder.ts::extractDigitsKoreanAware` 가 한국어 단위
+ * (억·만·천·백·십) 를 zero-padding 으로 확장. Step 5 미리보기 / DB 메모와 표시 결과가 일치한다.
+ *
+ * "10만원" → "100,000원", "1억" → "100,000,000원", "일금" → "일금" (원문 보존).
+ */
 function formatAmount(amount: string): string {
-  // 숫자만 추출해 콤마 단위로. 비숫자 문자는 그대로 보존 (사용자가 "10만원" 식 입력했을 수도).
-  const onlyDigits = amount.replace(/[^\d]/g, "");
+  const onlyDigits = extractDigitsKoreanAware(amount);
   if (onlyDigits.length === 0) return amount;
   const n = Number(onlyDigits);
   if (!Number.isFinite(n)) return amount;
