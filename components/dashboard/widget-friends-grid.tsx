@@ -19,7 +19,16 @@ import type { FriendGridCell } from "@/lib/dashboard/types";
  *   - 최대 6명 — 데스크톱에서 2열 × 3행, 태블릿 2열 × 3행, 모바일 1열 × 6행.
  *   - 각 셀이 `/friends/[id]` 로 가는 Link (FriendCard 와 같은 패턴).
  *   - 생일 D-N 배지: 생일 정보가 있을 때만, 회상 톤이라 강한 빨강 대신 brand-primary 톤.
- *   - 최근 신세 메모 1줄 truncate. 빈 케이스("recent_memo=null")는 "함께한 기록을 시작해 보세요" 카피.
+ *
+ * Lead 응대 라운드 (`1e9fe5a [docs] 007 Lead 응대 라운드`, 결정 §I-5 일부 양보):
+ *   - **친구별 최근 메모(`recent_memo`) 노출 제거**. 회상 노트 톤은 위젯 A 가 담당하고 위젯 B 는
+ *     "친구 그리드 6명 카드" 본 목적(이름·count·생일)만 살린다. 시각 부하 감소.
+ *   - 친구 카드 링크 aria-label = `${name} 친구 카드` — 위젯 C 의 `${name} 다가오는 생일` 과 차별화.
+ *     동일 친구가 위젯 B + C 둘 다 등장해도 selector ambiguity 없음.
+ *
+ * Lead 응대 후속 (`0bdac2d [docs] 007 §1 후속`):
+ *   - 생일 D-N / "오늘" 배지를 `aria-hidden="true"` 처리. 시각은 그대로(친구 그리드 보조 정보)
+ *     접근성 트리에서만 제외 → 위젯 C 가 "다가오는 생일" 강조 본 의미 단독 담당.
  */
 
 type WidgetFriendsGridProps = {
@@ -74,7 +83,7 @@ function FriendGridCellLink({ friend }: { friend: FriendGridCell }) {
   return (
     <Link
       href={`/friends/${friend.id}`}
-      aria-label={`${friend.name} 상세 보기`}
+      aria-label={`${friend.name} 친구 카드`}
       className={cn(
         "group flex items-start gap-2.5 rounded-lg border border-border/70 bg-background/50 px-2.5 py-2 transition-all",
         "hover:-translate-y-0.5 hover:border-foreground/20 hover:bg-card hover:shadow-sm",
@@ -88,9 +97,11 @@ function FriendGridCellLink({ friend }: { friend: FriendGridCell }) {
             {friend.name}
           </h3>
           {countdown ? (
+            // 시각 정보는 유지하되 접근성 트리에선 위젯 C 가 "다가오는 생일" 강조 본 의미를 담당
+            // (결정 로그 007 §1 후속 — 0bdac2d). 위젯 B 는 보조 정보이므로 aria-hidden 처리.
             <span
+              aria-hidden="true"
               className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none font-medium text-accent-foreground"
-              aria-label={`생일 ${countdown}`}
             >
               <Cake aria-hidden className="size-2.5 text-brand-primary" />
               {countdown}
@@ -104,15 +115,6 @@ function FriendGridCellLink({ friend }: { friend: FriendGridCell }) {
           </span>
           개
         </p>
-        {friend.recent_memo ? (
-          <p className="mt-1 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
-            {friend.recent_memo}
-          </p>
-        ) : (
-          <p className="mt-1 text-[11px] italic text-muted-foreground/70">
-            함께한 기록을 시작해 보세요
-          </p>
-        )}
       </div>
     </Link>
   );

@@ -65,7 +65,7 @@ function BirthdayRow({ item }: { item: UpcomingBirthday }) {
       {/* 상단: 친구 + 생일 + D-N */}
       <Link
         href={`/friends/${item.friend_id}`}
-        aria-label={`${item.friend_name} 상세 보기`}
+        aria-label={`${item.friend_name} 다가오는 생일`}
         className="group/birthday-head flex items-center gap-2 outline-none"
       >
         <InitialAvatar name={item.friend_name} size="sm" />
