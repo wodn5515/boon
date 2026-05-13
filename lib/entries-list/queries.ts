@@ -254,8 +254,18 @@ async function e2eListEntriesFiltered(
   });
 
   // 정렬 — SQL 본체와 동일 규약.
+  //
+  // Array.sort 의미:
+  //   - compare(a,b) < 0 → a 가 b 보다 앞.
+  //   - compare(a,b) > 0 → a 가 b 보다 뒤.
+  //
+  // oldest (ASC): 작은 날짜가 앞 → a < b 이면 a 가 앞 → return 음수.
+  // recent (DESC): 큰 날짜가 앞 → a < b 이면 a 가 뒤 → return 양수.
+  //
+  // 따라서 oldest 일 때 dir=-1, recent 일 때 dir=1 로 두면
+  // `a.received_date < b.received_date ? dir : -dir` 가 양방향 모두 자연스럽게 정합한다.
   filtered.sort((a, b) => {
-    const dir = params.sort === "oldest" ? 1 : -1;
+    const dir = params.sort === "oldest" ? -1 : 1;
     if (a.received_date !== b.received_date) {
       return a.received_date < b.received_date ? dir : -dir;
     }
