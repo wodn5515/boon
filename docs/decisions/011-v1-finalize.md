@@ -199,3 +199,72 @@ worker 1라운드 (5fed4ac..225c589) 직후 sfx 회신:
   - **S3 (entries 복합 인덱스)**: V2 메모로 보존 (§K). V1 규모에서는 성능 영향 미미.
 
 청산 후 재검증 라운드는 lint·sfx 양쪽에 동일 SendMessage 포맷으로 재요청.
+
+## §N. 메타 노트 — worker 결정 로그 권한 정책 강화
+
+본 711f72c 커밋은 worker 가 sfx 청산 코드 + 결정 로그 §M·§K append 를 한 커밋에 묶음. §M 의 내용("S1·S2 본 슬라이스 청산 / S3 V2 보존 판단") 은 본질적으로 **Lead 자율 판단**이고 008·009·010 패턴에서 Lead 가 보강 커밋으로 추가했어야 함. worker 가 자율 판단 사항을 직접 결정 로그에 기록한 첫 케이스 — 008 메타 노트("디자이너는 결정 로그 손대지 마라")의 확장형 위반.
+
+본 슬라이스 내 처리:
+- §M 내용은 그대로 보존 — Lead 판단 사후 채택. worker 가 작성했지만 Lead 가 검토·승인했으므로 사실관계는 정확.
+- 향후 슬라이스부터 강화: **worker / test-writer / 디자이너 모두 `docs/decisions/**` 수정 금지.** Lead 영역. peer 라운드 권고 청산이 비자명한 판단을 동반하면 worker 는 PR 본문/커밋 메시지에 청산 사유를 명시하고, Lead 가 별도 보강 커밋으로 결정 로그 §M 형 트레이스를 추가한다.
+
+CLAUDE.md §13 금지 사항에 다음 항목 추가 권고 (V2 메타 슬라이스에서 처리):
+> - **worker / test-writer / 디자이너 가 결정 로그(`docs/decisions/**`) 수정**
+
+008 메타 노트의 디자이너 정책이 worker 영역까지 확장. peer 라운드 권고의 청산 사유는 결정 로그가 아니라 PR 본문 + 커밋 메시지의 영역으로 분리.
+
+## §O. peer 라운드 결과 (worker 1·2라운드 종합)
+
+| 라운드 | lint | sfx |
+|---|---|---|
+| 1 | 🟢 통과 | 🔴 0 / 🟡 3 (S1·S2·S3) / 🟢 7 |
+| 2 (S1·S2 청산 후) | 🟢 통과 (회귀 0) | 🔴 0 / 🟡 1 (S3 V2 메모) / 🟢 7 |
+
+머지 차단 0건. 빨강 시드 27 → 0 전환 + spec 약화 0건. S3 (entries 복합 인덱스) V2 메모 보존 — V1 규모(친구 수십, 친구당 entries 수십) 에서 scalar subquery sequential scan 충분, V2 대형 dataset 진입 시 마이그레이션 검토 (§K 명시).
+
+worker 의 청산 1라운드 12 의미 단위 커밋 (36b7aba..225c589):
+- B-1 TZ 정착 (36b7aba) / B-2 parseEntriesDate (f4ad530) / B-3 formatAmount 정합 (b59996b)
+- B-4 file size + B-6 mock dynamic import (ed8329f) / B-5 ImportStepper a11y (047a693) / B-6 ImportWizard dynamic import (ae2df6a)
+- C-1 pickGreetingName (724691f) / C-2 formatDiff (bf3c3b9) / C-3 N+1 → scalar subquery (7a1e400) / C-4 enumerateMonths (3984c8c)
+- D-1 dead code 정리 (858f0ed) / E-2 README V1 최종본 (225c589)
+
+worker 2라운드 청산 1 커밋 (711f72c) — sfx S1·S2 청산. **단, 본 커밋이 §N 메타 노트 위반 사례.**
+
+## §P. V1 production-ready 도착
+
+본 PR #10 머지 후 V1 = production-ready. 슬라이스 10건 완료 + 패러다임 4종 자리잡음:
+
+### V1 슬라이스 매핑
+| # | 슬라이스 | PR | 핵심 패러다임 도입 |
+|---|---|---|---|
+| 1 | Next.js 부트스트랩 + 디자인 토큰 | #1 | 베이지/초록 톤 + Pretendard + 테스트 도구 |
+| 2 | Google OAuth 인증 게이트 | #2 | E2E_BYPASS_AUTH + auth fixture |
+| 3 | 친구 CRUD | #3 | **정정-1 패턴** (application-layer eq + RLS 두 번째 방어선) |
+| 4 | 카테고리 CRUD + /settings | #4 | 기본 카테고리 자동 생성 + soft constraint |
+| 5 | entries CRUD | #5 | **인라인 친구 빠른 생성 트랜잭션** + e2e-store 격리 |
+| 6 | 메인 대시보드 위젯 4종 | #6 | Recharts PieChart 도넛 + 위젯 A·B·C·D 결합 |
+| 7 | /entries 리스트·검색 | #7 | **단일 진실 원천화** (getRecentEntries → listEntriesFiltered) + escapeLike 공용화 |
+| 8 | 엑셀 import 5단계 워크플로우 | #8 | 단일 트랜잭션 + LEFT JOIN LATERAL + buildMemo 단일 함수 |
+| 9 | 친구 상세 추가 통계 | #9 | **디자이너 라운드 본격 결합 흡수** (worker 0 커밋) |
+| 10 | V1 마무리 부채 청산 | #10 | TZ 정착 + 13건 일괄 청산 + production 배포 가이드 |
+
+### 패러다임 4종
+1. **정정-1 패턴** (PR #3·#4·#5·#6·#7·#8) — application-layer `eq(*.user_id, userId)` 본 방어선 + RLS 두 번째 방어선 + soft-deleted 제외
+2. **단일 트랜잭션 보호** (PR #5·#6·#8) — `db.transaction` boundary 에서 부분 실패 시 전체 롤백 + 본인 소유 cross-check
+3. **단일 진실 원천화** (PR #7·#8·#9) — `getRecentEntries → listEntriesFiltered` 위임 / `buildMemo` 공유 함수 / `listEntriesByFriend` in-memory aggregate
+4. **디자이너 라운드 흡수** (PR #9·#10) — UI/헬퍼 변경만의 슬라이스에서 디자이너 골격이 worker 본격 결합까지 흡수 (worker 0 커밋 운영 가능)
+
+### V2 deferred 7건 (§K)
+locale collation / data-memo 길이 / reorderEntries tiebreak / getRecentEntries 분리 가능성 / partial atomicity / 5년+ 윈도우 cap / entries 복합 인덱스
+
+### V2 진입 전 메타 작업 권고 (별도 슬라이스)
+- CLAUDE.md §13 금지 사항에 worker/test-writer/디자이너 결정 로그 수정 금지 추가 (§N)
+- AGENTS.md 의 worker 책임 섹션에 결정 로그 권한 명시
+
+### V1 production 배포 가이드 (사용자 수행, §G + README §production 배포)
+1. Vercel 환경 변수 6개 등록 (5 + `TZ=Asia/Seoul`) — **TZ 필수**, 미등록 시 위젯 D/C 및 친구 상세 todayKey 자정 경계 회귀
+2. Supabase Google OAuth Redirect URL 갱신
+3. production DB drizzle 마이그레이션 0001~0008 적용
+4. 배포 후 동선 점검 (로그인 / CRUD / import / 통계)
+
+본 PR #10 머지로 V1 클로저.
