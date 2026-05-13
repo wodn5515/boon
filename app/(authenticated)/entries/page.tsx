@@ -6,14 +6,12 @@ import { EntriesFilterBar } from "@/components/entries/entries-filter-bar";
 import { EntryItem } from "@/components/entries/entry-item";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  MOCK_CATEGORY_OPTIONS,
-  MOCK_FRIEND_OPTIONS,
-} from "@/lib/entries-list/mock";
+import { listCategories } from "@/lib/categories/queries";
 import {
   listEntriesFiltered,
   type EntriesSort,
 } from "@/lib/entries-list/queries";
+import { listFriends } from "@/lib/friends/queries";
 
 export const metadata: Metadata = {
   title: "받은 신세 · Boon",
@@ -32,7 +30,10 @@ export const metadata: Metadata = {
  *   - from / to  ISO YYYY-MM-DD (받은 날짜 범위, 포함)
  *   - sort       "recent" (기본) / "oldest"
  *
- * 디자이너 라운드 — listEntriesFiltered() 는 mock 위 골격 필터. worker 라운드에서 SQL 본체로 교체.
+ * 데이터 결합 (008 §G + worker 라운드):
+ *   - listEntriesFiltered + listFriends + listCategories 를 Promise.all 로 병렬 호출.
+ *   - mock 결합 제거 — `lib/entries-list/mock.ts` 도 함께 삭제.
+ *   - E2E_BYPASS_AUTH=1 분기는 각 query 함수가 내부에서 처리 (e2e-store 위 모사).
  *
  * 위젯 A 결합 (008 §H): 메인 대시보드 위젯 A 의 `viewAllHref` 가 이미 `/entries` 라
  * 본 페이지 신설만으로 클릭 → 진입 자동 결합.
@@ -77,18 +78,28 @@ export default async function EntriesPage({ searchParams }: EntriesPageProps) {
   const to = parseDate(pickFirst(params.to));
   const sort = parseSort(pickFirst(params.sort));
 
-  // mock 결합 — worker 라운드에서 listFriends() / listCategories() 결과로 교체.
-  const friendOptions = MOCK_FRIEND_OPTIONS;
-  const categoryOptions = MOCK_CATEGORY_OPTIONS;
+  // 데이터 결합 — listEntriesFiltered + listFriends + listCategories 병렬.
+  const [entries, friendsRows, categoriesRows] = await Promise.all([
+    listEntriesFiltered({
+      q: q || undefined,
+      friendId: friend || undefined,
+      categoryId: category || undefined,
+      from: from || undefined,
+      to: to || undefined,
+      sort,
+    }),
+    listFriends(),
+    listCategories(),
+  ]);
 
-  const entries = await listEntriesFiltered({
-    q: q || undefined,
-    friendId: friend || undefined,
-    categoryId: category || undefined,
-    from: from || undefined,
-    to: to || undefined,
-    sort,
-  });
+  // 필터 바·EntryItem 옵션으로 정제 — UI 컴포넌트가 요구하는 필드만 추린다.
+  const friendOptions = friendsRows.map((f) => ({ id: f.id, name: f.name }));
+  const categoryOptions = categoriesRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+  }));
 
   const hasAnyFilter =
     q !== "" ||
