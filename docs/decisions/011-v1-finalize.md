@@ -184,3 +184,18 @@ worker 가 청산 후 27 → 0 빨강 전환 + 새로 추가된 그린 188 유�
 - e2eBulkImportEntries partial atomicity — production 에서 partial failure 인시던트 발생 시
 - 친구 상세 5년+ 윈도우 max cap (예: 36개월) — production 사용자 피드백 후
 - 보답 시점별 분포 시각화 / 친구 상세 차트 인터랙션 / 회상 환기 알림 — 알림 시스템과 함께
+- **`entries` 복합 인덱스 (`friend_id, user_id, received_date DESC, created_at DESC`)** — sfx 라운드 011 🟡 S3.
+  V1 규모(친구 수십·친구당 entries 수십)에서는 `getTopFriends` 의 scalar subquery 가 sequential scan 으로도 충분.
+  V2 의 대형 dataset(친구 100명+, 친구당 entries 50건+) 진입 시 마이그레이션 검토.
+
+## §M. sfx 라운드 011 — 🟡 청산 결정
+
+worker 1라운드 (5fed4ac..225c589) 직후 sfx 회신:
+
+- 🔴 0건 / 🟡 3건 (S1·S2·S3) / 🟢 7건 (확인 정보)
+- Lead 자율 판단:
+  - **S1 (next.config.ts env.TZ 운영 잠금)**: 본 슬라이스에서 청산. 주석 표현 격상 + README §production 배포 §5 "권장→필수" 격상. 운영 인시던트 잠금 가치 충분.
+  - **S2 (step-1-upload.tsx mock dynamic import 가드 비대칭)**: 본 슬라이스에서 청산. handleMockClick 본문 첫 줄에 `if (process.env.NODE_ENV === "production") return;` 가드 추가 → webpack 이 dynamic import 자체를 dead code 로 인지. production 빌드 산출물의 mock 청크 제거 완성.
+  - **S3 (entries 복합 인덱스)**: V2 메모로 보존 (§K). V1 규모에서는 성능 영향 미미.
+
+청산 후 재검증 라운드는 lint·sfx 양쪽에 동일 SendMessage 포맷으로 재요청.

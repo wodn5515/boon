@@ -161,8 +161,10 @@ export function Step1Upload({ onParsed }: Step1UploadProps) {
 
   async function handleMockClick() {
     // 디자이너 라운드 시연용 — 실제 .xlsx 없이도 흐름 검증.
-    // 결정 로그 011 §B-6 — dynamic import 로 production 번들에서 dead code elimination.
-    //   버튼 자체도 process.env.NODE_ENV !== "production" 가드 안에서만 렌더된다.
+    // 결정 로그 011 §B-6 + sfx 라운드 011 🟡 S2 — production NODE_ENV 가드를 함수 본문에도
+    //   배치해 webpack 이 dynamic import 자체를 dead code 로 인지하도록 한다. 버튼 렌더만
+    //   가드하면 호출 가능 함수로 보고 청크 artifact 가 빌드 산출물에 잔존할 수 있다.
+    if (process.env.NODE_ENV === "production") return;
     const { MOCK_EXCEL_HEADERS, MOCK_EXCEL_ROWS } = await import("@/lib/import/mock");
     onParsed({
       fileName: "예시 — 결혼식 축의금.xlsx",

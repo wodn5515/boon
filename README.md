@@ -123,7 +123,7 @@ V1 머지 직후 production 배포 가이드 (결정 로그 [011 §G](./docs/dec
    - Redirect URL: `https://<your-app>.vercel.app/auth/callback`
 3. **production DB 마이그레이션 적용** — `db/migrations/0001~0008_*.sql` 순서대로 (drizzle-kit)
 4. **배포 후 동선 점검** — 로그인 / 친구·카테고리·신세 CRUD / 엑셀 import (실제 .xlsx) / 통계 / 대시보드 위젯 4종 / `/entries` 리스트
-5. **TZ 정착** — `next.config.ts` 의 `env.TZ = "Asia/Seoul"` 가 빌드 시 잠금되지만, Vercel Functions 의 런타임 TZ 도 Vercel 환경 변수 `TZ=Asia/Seoul` 로 함께 등록 권장 (자정 경계 회귀 차단)
+5. **TZ 정착 — Vercel 환경 변수 `TZ=Asia/Seoul` 필수 등록** — `next.config.ts` 의 `env.TZ = "Asia/Seoul"` 는 빌드 시점 inline. Vercel Functions cold-start 시 Node 프로세스 TZ 는 Vercel 환경 변수에서 읽으므로 **콘솔 등록이 필수**. 미등록 시 위젯 D(이번 달) · 위젯 C(생일 D-N) · 친구 상세 월별 추이의 todayKey 가 자정 경계에서 한 달/하루 흔들릴 수 있음 (sfx 라운드 011 🟡 S1).
 
 ## 문서
 
