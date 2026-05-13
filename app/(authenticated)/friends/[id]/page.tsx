@@ -365,6 +365,7 @@ function aggregateByCategory(
   }
   return [...bucket.values()].sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
-    return a.name.localeCompare(b.name);
+    // ko-KR locale 명시 — queries.ts 의 e2e 분기(`localeCompare(b.name, "ko")`) 및 SQL `asc(friends.name)` 와 정합 (sfx 🟢 N1).
+    return a.name.localeCompare(b.name, "ko");
   });
 }

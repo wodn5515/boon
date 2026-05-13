@@ -18,7 +18,8 @@ import { CategoryDistributionChart } from "./category-distribution-chart";
  * 디자이너 결정:
  *   - wide span (페이지에서 col-span-2 로 배치) — 데스크톱 2/3 가로 사용
  *   - 빈 상태: count 0 이면 단일 카피 "이번 달 받은 신세가 아직 없어요. 첫 신세를 기록해 보세요"
- *   - 비교 카피: 지난 달 0 이면 "이번 달이 첫 달이에요" 같은 fallback 없이 비교 카피 자체 생략
+ *   - 비교 카피: prev=null 일 때만 생략(데이터 자체 없음). prev=0 이면 "지난 달 0건 → 이번 달 N건"
+ *     단순 표기 — "지난 달이 첫 달" 같은 안내 카피 없이 분위기 일관 (강박/부추김 회피).
  */
 
 type WidgetThisMonthSummaryProps = {
