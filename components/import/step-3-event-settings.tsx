@@ -31,11 +31,29 @@ import type { BatchSettings } from "@/lib/import/types";
  *   - 이벤트명 placeholder = "결혼식 축의금" — 결정 로그 D-016 시나리오 직접 참조.
  *   - 받은 날짜 기본 = 오늘 (entries 폼과 정합).
  *
+ * worker 결합 보강 (009 §F 의 자연 확장, sfx 라운드 1 🟡 #1 청산):
+ *   - 보답 시점 옵션에서 `specific_date` 제거. import 는 BatchSettings 에 단일 `receivedDate` 만
+ *     공유하는 흐름이라 row 마다 다른 `repayment_specific_date` 를 받을 채널이 없고, 200건 단일
+ *     날짜 보답은 의미 모호. `repayment_specific_date NULL + timing='specific_date'` 라는
+ *     006 §E 룰 위반 상태를 만들지 않도록 옵션 자체를 차단.
+ *   - 3종(anytime / friend_birthday / specific_event)만 노출. 사용자가 특정 날짜 보답이 필요하면
+ *     import 후 개별 entry 수정으로 처리.
+ *
  * 거절된 대안:
  *   - row 별 카테고리 다르게 설정 — 결혼식 축의금 한 번에 200건 시나리오에선 과한 자유도.
  *     필요하면 import 후 개별 수정.
  *   - 이벤트명 자동 추론 (파일명에서) — 파일명이 "신랑신부_엑셀_최종_v2.xlsx" 식이면 무의미.
+ *   - Step 3 에 single date picker 추가 + ImportRow 채널 보강 — 200건 단일 날짜 보답은 의미 모호한
+ *     V1 시나리오. V2 메모.
  */
+
+// 009 §F + sfx 1🟡#1 청산: import 흐름은 specific_date 보답을 지원하지 않음.
+// REPAYMENT_TIMING_OPTIONS (entries 폼 공용) 에서 specific_date 제외 후 사용.
+type ImportRepaymentTiming = Exclude<RepaymentTiming, "specific_date">;
+const IMPORT_TIMING_OPTIONS = REPAYMENT_TIMING_OPTIONS.filter(
+  (o): o is { value: ImportRepaymentTiming; label: string; badge: string } =>
+    o.value !== "specific_date",
+);
 
 export type Step3EventSettingsProps = {
   categoryOptions: ReadonlyArray<{
@@ -70,9 +88,12 @@ export function Step3EventSettings({
     initial?.receivedDate ?? todayISODate(),
   );
   const [categoryId, setCategoryId] = React.useState(defaultCategoryId);
-  const [timing, setTiming] = React.useState<RepaymentTiming>(
-    initial?.repaymentTiming ?? "specific_event",
-  );
+  const [timing, setTiming] = React.useState<ImportRepaymentTiming>(() => {
+    const raw = initial?.repaymentTiming;
+    // initial 이 (이전 슬라이스/V2) specific_date 였더라도 import 흐름에선 차단.
+    if (raw && raw !== "specific_date") return raw;
+    return "specific_event";
+  });
 
   const eventNameTrim = eventName.trim();
   const canProceed =
@@ -169,7 +190,7 @@ export function Step3EventSettings({
           <Label htmlFor="import-repayment-timing">보답 시점</Label>
           <Select
             value={timing}
-            onValueChange={(v) => setTiming(v as RepaymentTiming)}
+            onValueChange={(v) => setTiming(v as ImportRepaymentTiming)}
           >
             <SelectTrigger
               id="import-repayment-timing"
@@ -179,7 +200,7 @@ export function Step3EventSettings({
               <SelectValue placeholder="보답 시점 선택" />
             </SelectTrigger>
             <SelectContent>
-              {REPAYMENT_TIMING_OPTIONS.map((opt) => (
+              {IMPORT_TIMING_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
