@@ -105,6 +105,12 @@ export async function listEntriesFiltered(
 
   const conditions: SQL[] = [
     eq(entries.user_id, userId),
+    // 두 번째 application-layer 방어선 (sfx 라운드 2 🟢 N-1):
+    //   entries.user_id eq 가 본 방어선이지만, 미래의 write 경로 빈틈을 read 단에서도
+    //   막기 위해 JOIN 된 친구·카테고리의 user_id 도 명시 검사한다. 좁히는 방향이라
+    //   회귀 위험 0, 정정-1 패턴 정합.
+    eq(friends.user_id, userId),
+    eq(categories.user_id, userId),
     eq(friends.is_deleted, false),
   ];
 
