@@ -144,21 +144,6 @@ function formatTooltipMonth(monthKey: string): string {
   return `${m[1]}년 ${Number(m[2])}월`;
 }
 
-/**
- * 디자이너 라운드 시연용 mock 데이터.
- *
- * worker 결합 시점에 page.tsx 가 `aggregateMonthlyTrend(friendEntries)` 결과를 그대로
- * 넘기게 되면 이 export 는 미사용이 된다 — 이후 cleanup 가능.
- *
- * 패턴: 8개월 폭, 점진적으로 증가하다 마지막 두 달은 잠시 비는 "회상" 곡선.
- */
-export const MOCK_MONTHLY_TREND: ReadonlyArray<MonthlyTrendDatum> = [
-  { month: "2024-09", label: "9월", count: 1 },
-  { month: "2024-10", label: "10월", count: 2 },
-  { month: "2024-11", label: "11월", count: 3 },
-  { month: "2024-12", label: "12월", count: 2 },
-  { month: "2025-01", label: "1월", count: 4 },
-  { month: "2025-02", label: "2월", count: 1 },
-  { month: "2025-03", label: "3월", count: 0 },
-  { month: "2025-04", label: "4월", count: 2 },
-] as const;
+// 결정 로그 011 §D-1 — MOCK_MONTHLY_TREND export 제거.
+//   worker 결합 후 page.tsx 가 aggregateMonthlyTrend(friendEntries) 결과를 직접 넘기므로
+//   mock 데이터는 미사용. PR #9 🟢 nit + sfx 🟢 청산.

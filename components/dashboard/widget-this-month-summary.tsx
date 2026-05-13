@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InitialAvatar } from "@/components/ui/initial-avatar";
 import { cn } from "@/lib/utils";
+import { formatDiff } from "@/lib/dashboard/format-diff";
 import type { ThisMonthSummary } from "@/lib/dashboard/types";
 
 import { CategoryDistributionChart } from "./category-distribution-chart";
@@ -115,20 +116,6 @@ export function WidgetThisMonthSummary({ summary }: WidgetThisMonthSummaryProps)
       </CardContent>
     </Card>
   );
-}
-
-/**
- * 지난 달 ↔ 이번 달 비교 카피.
- *
- * 디자이너 결정:
- *   - prev null → 비교 자체 생략 (기록이 아직 없는 사용자에게 비교 카피는 헛헛함).
- *   - prev 0 && cur > 0 → "지난 달 0건 → 이번 달 N건" (시작의 톤).
- *   - cur >= prev → "지난 달 N건 → 이번 달 M건" 단순 표기 (강박 회피, "더 많이!" 같은 부추김 없음).
- *   - cur < prev → 동일 단순 표기 ("부담 줄어든 회상" 같은 가치 판단 카피는 피한다)
- */
-function formatDiff(prev: number | null, cur: number): string | null {
-  if (prev == null) return null;
-  return `지난 달 ${prev}건 → 이번 달 ${cur}건`;
 }
 
 function EmptyState() {

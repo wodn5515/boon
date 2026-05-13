@@ -125,13 +125,12 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
    */
   const friendCategoryDistribution = aggregateByCategory(friendEntries);
 
-  // === PR #9 통계 보강 (디자이너 라운드 골격 — worker 결합 포인트) ===
+  // === PR #9 통계 보강 — 월별 추이 + 활동 요약 결합 ===
   // listEntriesByFriend 결과를 그대로 in-memory aggregate.
   // 카테고리 분포와 동일한 패턴: 친구 한 명의 entries 는 보통 수십~수백 row 라
   // 별도 SQL aggregate 가 필요 없고, fetch 한 결과 위에서 충분히 저렴.
   // 자세한 결정 근거는 lib/friends/stats.ts 의 JSDoc 참조.
-  // TODO(worker): listEntriesByFriend 가 date asc 가 아닐 수 있다면 정렬 보장 확인.
-  //   summarizeActivity 는 내부에서 sort 하지만 aggregateMonthlyTrend 는 received_date 만 본다.
+  // 두 헬퍼 모두 내부에서 received_date 를 직접 보거나 자체 정렬을 수행해 입력 순서에 무관.
   const friendMonthlyTrend = aggregateMonthlyTrend(friendEntries);
   const friendActivity = summarizeActivity(friendEntries);
 
@@ -288,11 +287,8 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
         </Card>
       </section>
 
-      {/* === PR #9 통계 보강 — 월별 추이 + 활동 요약 (디자이너 라운드 골격) ===
-          worker 결합 포인트:
-            - friendMonthlyTrend / friendActivity 는 위에서 in-memory aggregate 완료.
-            - 본 슬라이스에 새 SQL 결합은 없음.
-            - mock 데이터 시연은 컴포넌트 export (MOCK_MONTHLY_TREND) 로 확인 가능. */}
+      {/* === PR #9 통계 보강 — 월별 추이 + 활동 요약 ===
+          friendMonthlyTrend / friendActivity 는 위에서 in-memory aggregate 완료. */}
       <section className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card size="sm" className="px-3">
           <CardHeader className="px-0">

@@ -93,11 +93,19 @@ export function aggregateMonthlyTrend(
   // 가변이지만 너무 짧으면(<6) 6개월 폭으로 패딩 — 빈 차트가 휑하지 않도록.
   const todayKey = formatMonthKey(now.getFullYear(), now.getMonth() + 1);
   const endKey = maxKey > todayKey ? maxKey : todayKey;
+
+  // 결정 로그 011 §C-4 — 비정상 입력(minKey → endKey 가 1000개월 이상)은 빈 배열 반환.
+  //   padIfShort 가 padding 으로 보정하기 전에 윈도우 폭 자체를 점검한다. padIfShort 가 호출하는
+  //   enumerateMonths 가 가드 초과 시 [] 를 반환하면 padIfShort 가 잘못 "짧은 윈도우" 로 인지해
+  //   6개월 패딩으로 우회하기 때문에 상위에서 명시 분기.
+  if (monthsSpan(minKey, endKey) > 1000) return [];
+
   const startKey = padIfShort(minKey, endKey);
 
   // start → end 사이 모든 달을 0 채움.
   const result: MonthlyTrendDatum[] = [];
   const months = enumerateMonths(startKey, endKey);
+  if (months.length === 0) return [];
   const useShortLabel = months.length <= 12;
   for (const key of months) {
     const [y, mo] = key.split("-").map(Number);
@@ -164,6 +172,17 @@ function formatMonthKey(year: number, month1based: number): string {
 }
 
 /**
+ * "YYYY-MM" 두 키 사이의 월 폭 (inclusive). startKey > endKey 면 0.
+ * enumerateMonths 의 1000개월 가드와 정합 — 결정 로그 011 §C-4 의 비정상 입력 차단용.
+ */
+function monthsSpan(startKey: string, endKey: string): number {
+  const [sy, sm] = startKey.split("-").map(Number);
+  const [ey, em] = endKey.split("-").map(Number);
+  const span = (ey - sy) * 12 + (em - sm) + 1;
+  return span > 0 ? span : 0;
+}
+
+/**
  * minKey → endKey 사이 윈도우가 6개월 미만이면 6개월 폭으로 패딩.
  * 첫 신세가 endKey 한두 달 전이면 차트가 너무 휑하므로 endKey 기준 -5개월까지 끌어준다.
  */
@@ -183,17 +202,19 @@ function enumerateMonths(startKey: string, endKey: string): string[] {
   let y = sy;
   let m = sm;
   // 안전 가드: 1000개월 (≈83년) 이상이면 비정상 입력 — 빈 배열 반환.
+  // 결정 로그 011 §C-4 — 주석의 의도(빈 배열 반환) 와 동작을 일관화. 가드 초과 시 누적된
+  // 결과를 모두 버리고 []. aggregateMonthlyTrend 가 받으면 상위에서도 [] 로 전파된다.
   let guard = 0;
   while (guard++ < 1000) {
     out.push(formatMonthKey(y, m));
-    if (y === ey && m === em) break;
+    if (y === ey && m === em) return out;
     m++;
     if (m > 12) {
       m = 1;
       y++;
     }
   }
-  return out;
+  return [];
 }
 
 function diffDays(isoA: string, isoB: string): number {

@@ -13,7 +13,6 @@ import { Step2ColumnMapping } from "@/components/import/step-2-column-mapping";
 import { Step3EventSettings } from "@/components/import/step-3-event-settings";
 import { Step4MatchingReview } from "@/components/import/step-4-matching-review";
 import { Step5Preview } from "@/components/import/step-5-preview";
-import { MOCK_MATCH_RESULTS } from "@/lib/import/mock";
 import type {
   BatchSettings,
   ColumnMapping,
@@ -22,6 +21,12 @@ import type {
   NormalizedRow,
   RowDecision,
 } from "@/lib/import/types";
+
+// 결정 로그 011 §B-6 — mock 모듈은 dev 시연용. production 번들에서 dead code elimination 되도록
+//   top-level `import` 대신 dynamic `import()` 를 NODE_ENV 가드 안에서만 호출한다.
+//   - matchAction 미지정 분기에서만 mock 매칭표가 필요 (디자이너 라운드 시연 한정).
+//   - production 에서는 matchAction 이 반드시 주입되어 mock 경로 자체가 도달 불가능.
+//   - sfx 라운드 PR #9 🟡 #1 청산.
 
 /**
  * ImportWizard — 5단계 엑셀 import 워크플로우의 client 컨테이너 (PRD §3, D-016).
@@ -122,9 +127,14 @@ export function ImportWizard({
           ...r,
           rowIndex: indexedNames[i]?.rowIndex ?? r.rowIndex,
         }));
-      } else {
+      } else if (process.env.NODE_ENV !== "production") {
         // mock 분기 — UI 골격 시연. 실제 rowIndex 와 매핑 동기화.
-        results = buildMockMatchResults(parsed, mapping);
+        // 결정 로그 011 §B-6 — dynamic import 로 production 번들에서 dead code elimination.
+        const { MOCK_MATCH_RESULTS } = await import("@/lib/import/mock");
+        results = buildMockMatchResults(parsed, mapping, MOCK_MATCH_RESULTS);
+      } else {
+        // production 에서는 matchAction 이 반드시 주입돼야 한다 — fallback X.
+        throw new Error("친구 매칭 호출이 설정되지 않았어요.");
       }
       setMatchResults(results);
       setDecisions(null); // 새 매칭 → 결정 초기화.
@@ -275,16 +285,18 @@ export function ImportWizard({
 // ============================================================
 // mock 매칭 결과 빌더 — MOCK_MATCH_RESULTS 의 이름 표를 정규화된 row 에 매핑.
 // 실제 파일을 업로드한 경우에도 디자이너 시연이 가능하도록 이름 일치만 검사.
+// 결정 로그 011 §B-6 — 호출자가 dynamic import 한 mock 테이블을 인자로 넘긴다.
 // ============================================================
 function buildMockMatchResults(
   parsed: ParsedExcel,
   mapping: ColumnMapping,
+  mockResults: ReadonlyArray<MatchResult>,
 ): ReadonlyArray<MatchResult> {
   if (!mapping.name) return [];
   const nameCol = mapping.name;
   // mock 테이블에서 이름 → 후보들.
   const mockByName = new Map<string, MatchResult["candidates"]>();
-  for (const r of MOCK_MATCH_RESULTS) {
+  for (const r of mockResults) {
     mockByName.set(r.name, r.candidates);
   }
   const result: MatchResult[] = [];

@@ -15,11 +15,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import {
-  MOCK_EXCEL_HEADERS,
-  MOCK_EXCEL_ROWS,
-} from "@/lib/import/mock";
 import type { RawRow } from "@/lib/import/types";
+
+// 결정 로그 011 §B-6 — mock 모듈은 dev 시연용. production 번들에서 dead code elimination 되도록
+//   top-level `import` 대신 dynamic `import()` 를 NODE_ENV 가드 안에서만 호출한다.
+//   `handleMockClick` 진입 자체가 production 에서는 버튼 미렌더링이라 도달 불가능.
 
 /**
  * Step 1 — 엑셀 파일 업로드 + 시트 선택 (PRD §3).
@@ -51,6 +51,11 @@ export type Step1UploadProps = {
   onParsed: (parsed: ParsedExcel) => void;
 };
 
+// 결정 로그 011 §B-4 — XLSX.read 진입 전 file size 가드.
+//   사용자가 수십~수백 MB 짜리 .xlsx 를 떨구면 client 메모리 폭주 / 브라우저 freeze.
+//   회상 노트 톤상 친구가 50~200명 단위라 10MB 면 충분히 여유 (.xlsx 압축률 고려).
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
 export function Step1Upload({ onParsed }: Step1UploadProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -66,6 +71,14 @@ export function Step1Upload({ onParsed }: Step1UploadProps) {
 
   async function handleFile(file: File) {
     setError(null);
+    // 결정 로그 011 §B-4 — XLSX.read 진입 전 10MB 가드. SheetJS 가 메모리에서 압축 해제하면
+    //   같은 byte 수의 수배까지 RAM 으로 부풀어오를 수 있어 사전 차단.
+    if (file.size > MAX_FILE_BYTES) {
+      setError(
+        "파일이 너무 커요. 10MB 이하의 .xlsx · .xls 만 가져올 수 있어요. 시트를 나눠 다시 시도해 주세요.",
+      );
+      return;
+    }
     setPending(true);
     try {
       const buf = await file.arrayBuffer();
@@ -146,8 +159,13 @@ export function Step1Upload({ onParsed }: Step1UploadProps) {
     onParsed(parsed);
   }
 
-  function handleMockClick() {
+  async function handleMockClick() {
     // 디자이너 라운드 시연용 — 실제 .xlsx 없이도 흐름 검증.
+    // 결정 로그 011 §B-6 + sfx 라운드 011 🟡 S2 — production NODE_ENV 가드를 함수 본문에도
+    //   배치해 webpack 이 dynamic import 자체를 dead code 로 인지하도록 한다. 버튼 렌더만
+    //   가드하면 호출 가능 함수로 보고 청크 artifact 가 빌드 산출물에 잔존할 수 있다.
+    if (process.env.NODE_ENV === "production") return;
+    const { MOCK_EXCEL_HEADERS, MOCK_EXCEL_ROWS } = await import("@/lib/import/mock");
     onParsed({
       fileName: "예시 — 결혼식 축의금.xlsx",
       sheetNames: ["축의금"],
@@ -273,7 +291,7 @@ export function Step1Upload({ onParsed }: Step1UploadProps) {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={handleMockClick}
+            onClick={() => void handleMockClick()}
             className="text-xs text-muted-foreground"
           >
             예시 파일로 흐름 살펴보기

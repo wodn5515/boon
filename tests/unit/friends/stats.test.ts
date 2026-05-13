@@ -187,3 +187,70 @@ describe("formatKoreanDate", () => {
     expect(formatKoreanDate("2024-12-31")).toBe("2024년 12월 31일");
   });
 });
+
+// ============================================================
+// [B-1] TZ 정착 — next.config.ts + vitest 환경에 TZ=Asia/Seoul 강제 (011 §B-1)
+// ============================================================
+//
+// 결정 로그 011 §B-1: `next.config.ts` 의 env.TZ + vitest 의 test.env(TZ) 가
+// 함께 "Asia/Seoul" 로 잠겨야 한다. 시스템/CI 시간대에 따라 aggregateMonthlyTrend 의
+// todayKey 가 UTC 기준으로 흔들리던 PR #6/#9 회귀를 방어한다.
+//
+// 빨강 시드: 현재 vitest.setup.ts / vitest.config.ts 어디에도 TZ 가 강제되어 있지 않다.
+// worker 청산 후에는 vitest 가 어떤 호스트에서 돌든 process.env.TZ === "Asia/Seoul" 이고,
+// Intl.DateTimeFormat 의 resolvedOptions().timeZone 도 동일하게 잠긴다.
+describe("[B-1] TZ 정착 회귀 방어", () => {
+  it("vitest 프로세스의 TZ 가 'Asia/Seoul' 로 잠겨 있다", () => {
+    expect(process.env.TZ).toBe("Asia/Seoul");
+  });
+
+  it("Intl.DateTimeFormat 의 기본 timeZone 도 'Asia/Seoul' 로 잠겨 있다", () => {
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe("Asia/Seoul");
+  });
+
+  it("UTC 자정 경계(UTC 12-31 16:00 = KST 01-01 01:00)에서 aggregateMonthlyTrend 가 KST 기준 새해 월을 todayKey 로 잡는다", () => {
+    // 이 Date 는 KST 기준 2025-01-01 01:00 — 실시점이 '새해'.
+    // TZ=Asia/Seoul 가 잠기면 now.getMonth() 는 0(1월), getFullYear()=2025 가 된다.
+    const newYearMomentKst = new Date("2024-12-31T16:00:00.000Z");
+    // entries 는 모두 11월 안쪽 → endKey = max(maxKey, todayKey).
+    // worker 가 TZ 를 KST 로 정착하면 todayKey="2025-01" 이라 마지막 month = "2025-01".
+    const result = aggregateMonthlyTrend(
+      [entry("2024-11-15")],
+      newYearMomentKst,
+    );
+    const lastMonth = result.at(-1)?.month;
+    expect(lastMonth).toBe("2025-01");
+  });
+});
+
+// ============================================================
+// [C-4] enumerateMonths 1000개월 가드 — 주석 의도(빈 배열) 채택 (011 §C-4)
+// ============================================================
+//
+// `lib/friends/stats.ts::enumerateMonths` 주석은 "1000개월 (~83년) 이상이면 비정상 입력 →
+// 빈 배열 반환" 이라 명시하지만, 현재 코드는 1000번 누적 후 잘린 결과를 그대로 반환한다.
+// PR #9 review nit 후속: 주석과 동작을 일관화 — guard 초과 시 [] 반환.
+//
+// 본 spec 은 aggregateMonthlyTrend(=enumerateMonths 호출자) 의 외부 동작으로 잠근다.
+// 1000개월 초과 윈도우(예: 1930-01 ~ 2025-04 ≒ 1144개월) 입력 시 결과가 빈 배열이어야 한다.
+describe("[C-4] enumerateMonths 1000개월 가드 (비정상 입력 → 빈 배열)", () => {
+  it("first ~ end 가 1000개월을 초과하면 aggregateMonthlyTrend 가 빈 배열을 반환한다", () => {
+    // 1930-01 ~ 2025-04 = (2025-1930)*12 + (4-1) = 1140 + 3 = 1143 개월 폭.
+    const now = new Date(2025, 3, 30); // 2025-04-30
+    const result = aggregateMonthlyTrend(
+      [entry("1930-01-15"), entry("2025-04-12")],
+      now,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("정상 범위(1000개월 이내)에선 동일 입력 대비 결과가 비어 있지 않다 (가드가 정상 케이스를 잠식하지 않음)", () => {
+    // 90개월 폭 — 가드 한참 아래.
+    const now = new Date(2024, 6, 30);
+    const result = aggregateMonthlyTrend(
+      [entry("2017-01-15"), entry("2024-06-12")],
+      now,
+    );
+    expect(result.length).toBeGreaterThan(0);
+  });
+});

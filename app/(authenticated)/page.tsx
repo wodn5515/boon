@@ -5,6 +5,7 @@ import { WidgetRecentEntries } from "@/components/dashboard/widget-recent-entrie
 import { WidgetThisMonthSummary } from "@/components/dashboard/widget-this-month-summary";
 import { WidgetUpcomingBirthdays } from "@/components/dashboard/widget-upcoming-birthdays";
 import { getCurrentUser } from "@/lib/auth/user";
+import { pickGreetingName } from "@/lib/dashboard/greeting";
 import {
   getRecentEntries,
   getThisMonthSummary,
@@ -85,21 +86,5 @@ export default async function HomePage() {
   );
 }
 
-/**
- * 인사말 이름 선택.
- *
- * 디자이너 위임 결정:
- *   - users 테이블에 별도 `display_name` 컬럼이 V1 엔티티 정의에 없다 (PRD §4).
- *     이메일 username (`@` 앞부분) 을 보여주면 보통 자기 별명과 가깝다.
- *   - 이메일도 없으면 "친구" fallback — Boon 의 회상 노트 톤상 어색하지 않음.
- *   - 이메일 username 이 너무 길거나(>16자) 숫자 잔뜩이면 그냥 그대로 노출 (가공 X) — V1 단순함 우선.
- */
-function pickGreetingName(
-  user: { email: string | null } | null,
-): string {
-  const email = user?.email;
-  if (!email) return "친구";
-  const at = email.indexOf("@");
-  if (at <= 0) return email;
-  return email.slice(0, at);
-}
+// 결정 로그 011 §C-1 — pickGreetingName 은 lib/dashboard/greeting.ts 가 단일 진실 원천.
+//   `@` 없는 fallback 분기 + email null/빈 문자열 fallback 을 일관 처리.

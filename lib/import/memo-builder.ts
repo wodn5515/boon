@@ -29,8 +29,13 @@ export type BuildMemoInput = {
  *   "1억"   → "100000000"
  *   "3천"   → "3000"
  * 단위가 없으면 단순 digit-only strip.
+ *
+ * 결정 로그 011 §B-3 — Step 4 검토 화면(`step-4-matching-review.tsx::formatAmount`) 도 같은
+ *   규약으로 표시해야 Step 4 row 헤더 ≡ Step 5 미리보기 ≡ DB 메모 가 한 줄로 정렬된다.
+ *   별도 인라인 `replace(/[^\d]/g, "")` 로직이 떠돌면 "10만원" → "10원" 같은 표류 발생.
+ *   본 함수를 named export 로 노출해 import 측 단일 진실 원천화.
  */
-function extractDigitsKoreanAware(amount: string): string {
+export function extractDigitsKoreanAware(amount: string): string {
   let s = amount;
   s = s.replace(/억/g, "00000000");
   s = s.replace(/만/g, "0000");
