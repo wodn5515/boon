@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
-
 import { authenticatedStorageState } from "../fixtures/auth";
+import { expect, test } from "../fixtures/test-with-reset";
 
 /**
  * /settings 카테고리 관리 E2E (PRD §3, §5 — categories-crud 슬라이스).
@@ -219,31 +218,49 @@ test.describe("/settings 카테고리 관리", () => {
     ).toHaveCount(0);
   });
 
-  test("[시나리오 7] 사용자 카테고리에는 위/아래 정렬 버튼이 노출된다", async ({
+  test("[시나리오 7] 사용자 카테고리에는 위/아래 정렬 버튼이 노출된다 + 사용자 그룹의 첫 카테고리는 '위로 이동' 이 disabled (그룹 경계 — 005 🟡 #2)", async ({
     page,
   }) => {
-    const name = uniqueName("정렬대상");
+    const firstName = uniqueName("첫번째사용자");
+    const secondName = uniqueName("두번째사용자");
     await page.goto("/settings");
 
-    // 사용자 카테고리가 한 개라도 있어야 검증 가능 — 사전 생성.
-    await page
-      .getByRole("button", { name: /카테고리 추가/ })
-      .first()
-      .click();
-    const createDialog = page.getByRole("dialog");
-    await createDialog.getByLabel(/이름/).fill(name);
-    await createDialog
-      .getByRole("button", { name: /카테고리 추가하기/ })
-      .click();
-    await expect(createDialog).toBeHidden();
+    // 사용자 카테고리 두 개 생성. createCategory 가 sort_order = MAX+1 로 append 한다.
+    for (const n of [firstName, secondName]) {
+      await page
+        .getByRole("button", { name: /카테고리 추가/ })
+        .first()
+        .click();
+      const createDialog = page.getByRole("dialog");
+      await createDialog.getByLabel(/이름/).fill(n);
+      await createDialog
+        .getByRole("button", { name: /카테고리 추가하기/ })
+        .click();
+      await expect(createDialog).toBeHidden();
+    }
 
-    // 위/아래 화살표 버튼이 노출된다 (CategoryItem 의 aria-label).
+    // 위/아래 화살표 버튼이 모두 노출된다 (CategoryItem 의 aria-label).
     await expect(
-      page.getByRole("button", { name: `${name} 위로 이동` }),
+      page.getByRole("button", { name: `${firstName} 위로 이동` }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: `${name} 아래로 이동` }),
+      page.getByRole("button", { name: `${firstName} 아래로 이동` }),
     ).toBeVisible();
+
+    // 핵심 (005 사용자 리뷰 🟡 #2):
+    //   사용자 그룹의 첫 카테고리(시스템 3개 다음, sort_order 최솟값) 의 "위로 이동" 버튼이 disabled.
+    //   현재 settings/page.tsx 는 모든 카테고리에 대해 `i === 0` 으로 isFirst 를 매기므로
+    //   사용자 첫 카테고리(전체 index 3)는 isFirst=false → disabled 가 아니다. worker 가
+    //   settings/page.tsx 의 isFirst/isLast 계산을 그룹 경계 기준(시스템 그룹 / 사용자 그룹)으로
+    //   고쳐야 본 assert 가 초록으로 변한다.
+    await expect(
+      page.getByRole("button", { name: `${firstName} 위로 이동` }),
+    ).toBeDisabled();
+
+    // 사용자 그룹의 마지막 카테고리는 "아래로 이동" 이 disabled.
+    await expect(
+      page.getByRole("button", { name: `${secondName} 아래로 이동` }),
+    ).toBeDisabled();
   });
 
   test("[시나리오 8] 로그아웃 버튼을 누르면 /login 으로 이동한다", async ({

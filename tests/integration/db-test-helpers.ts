@@ -176,7 +176,6 @@ export async function createTestDb(): Promise<TestDb> {
  */
 export async function setAuthContext(testDb: TestDb, userId: string): Promise<void> {
   const claims = JSON.stringify({ sub: userId });
-  const escaped = claims.replace(/'/g, "''");
   // proxy 가 매 호출 직전 RESET ROLE 하므로 raw `testDb.pg` 가 아닌 내부 핸들로 직접 exec.
   // (proxy 로 호출하면 SET ROLE 직후 다음 호출에서 다시 RESET 되어 무효화된다.)
   // drizzle 의 raw pglite 인스턴스를 통해 컨텍스트가 유지된다.
@@ -186,7 +185,14 @@ export async function setAuthContext(testDb: TestDb, userId: string): Promise<vo
   // 따라서 GUC / ROLE 을 한 번에 같은 statement 로 보내야 RESET ROLE proxy 이전에 적용됨.
   // 대신 raw 핸들에 접근하는 길은 drizzle 의 client. testDb.db 의 내부 client 를 통해
   // execute(sql`...`) 로 보낸다 → drizzle 가 raw pg.query/exec 를 직접 호출 → proxy 미경유.
-  await testDb.db.execute(sql.raw(`SET request.jwt.claims = '${escaped}'`));
+  //
+  // 006 §J-3 / PR #4 🟢 #3: GUC 주입을 raw 문자열 보간이 아니라 set_config() 의 파라미터 바인딩으로.
+  //   - SET ROLE 은 동적 식별자 SQL 라 raw literal 유지 (식별자 바인딩 미지원).
+  //   - SET request.jwt.claims = '...' → set_config('request.jwt.claims', $1, false) 로 치환:
+  //     escape 책임을 드라이버에게 위임 → 작은따옴표 etc. 깨짐 경로 0.
+  await testDb.db.execute(
+    sql`SELECT set_config('request.jwt.claims', ${claims}, false)`,
+  );
   await testDb.db.execute(sql.raw(`SET ROLE authenticated`));
 }
 

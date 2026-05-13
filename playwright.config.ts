@@ -29,7 +29,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // 결정 로그 006 §J-7 후속:
+  //   CI / 로컬 모두 단일 worker 직렬화로 통일. 멀티-worker 환경은 단일 dev 서버 + globalThis
+  //   e2e-store 를 공유해 worker 간 reset/state-set race condition 이 발생한다.
+  //   per-test session namespace 도입 전까지 (V2 메모 — 결정 로그 006 후속) 단일 worker 유지.
+  workers: 1,
   reporter: process.env.CI ? "github" : "list",
 
   use: {

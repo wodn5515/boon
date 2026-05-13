@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
-
 import { authenticatedStorageState } from "../fixtures/auth";
+import { expect, test } from "../fixtures/test-with-reset";
 
 /**
  * 친구 관리 CRUD E2E (PRD §3, §5 - friends-crud 슬라이스).

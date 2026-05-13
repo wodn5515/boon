@@ -65,6 +65,19 @@ export function e2eCreateFriend(input: {
   birthday_day: number | null;
   note: string | null;
 }): void {
+  e2eCreateFriendReturning(input);
+}
+
+/**
+ * createFriend 의 returning 변형 — entries e2e-store 의 인라인 빠른 생성에서
+ * 새 friend_id 를 즉시 받아 entry insert 에 사용한다 (006 §C 결합).
+ */
+export function e2eCreateFriendReturning(input: {
+  name: string;
+  birthday_month: number | null;
+  birthday_day: number | null;
+  note: string | null;
+}): string {
   const id = randomUUID();
   const now = new Date();
   store.set(id, {
@@ -78,6 +91,7 @@ export function e2eCreateFriend(input: {
     created_at: now,
     updated_at: now,
   });
+  return id;
 }
 
 export function e2eUpdateFriend(input: {
@@ -105,4 +119,15 @@ export function e2eDeleteFriend(id: string): void {
   if (!row) return;
   if (row.user_id !== FAKE_USER_ID) return;
   store.set(id, { ...row, is_deleted: true, updated_at: new Date() });
+}
+
+/**
+ * E2E 인프라 reset (006 §J Lead 결정).
+ *
+ * `/api/_test/reset` 가 호출하는 store 초기화 헬퍼. dev 서버 lifecycle 동안 누적된
+ * 친구 데이터를 비워 다음 테스트가 깨끗한 상태에서 시작하게 한다.
+ * production 가드는 호출자(`/api/_test/reset` route + `isE2EBypassEnabled`)가 책임.
+ */
+export function resetE2EFriendsStore(): void {
+  store.clear();
 }
