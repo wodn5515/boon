@@ -168,6 +168,25 @@ export async function bulkImportEntries(
     return { entriesCreated: 0, friendsCreated: 0 };
   }
 
+  // 입력 모양 빠른 검증 (E2E 분기 진입 전 공통 적용).
+  // sfx 라운드 2 🟢 #1 청산: UI(Step 3) 가 specific_date 옵션을 차단하지만, 다른 진입점
+  // (모듈 직접 호출, mock, future server action) 에서 specific_date 가 들어와도 006 §E 의
+  // "specific_date 가 아니면 repayment_specific_date 는 null" 룰을 위반하지 않도록 defensive guard.
+  // ImportRow 채널엔 specific_date 가 들어올 자리가 없어 import 자체를 거절.
+  for (const row of rows) {
+    if (!row.friendId && !row.newFriendName) {
+      throw new Error("친구 정보가 비어 있는 row 가 있어요.");
+    }
+    if (!row.categoryId) {
+      throw new Error("카테고리가 비어 있는 row 가 있어요.");
+    }
+    if (row.repaymentTiming === "specific_date") {
+      throw new Error(
+        "일괄 import 는 '특정 날짜' 보답 시점을 지원하지 않아요. 가져온 뒤 개별 신세에서 설정해 주세요.",
+      );
+    }
+  }
+
   if (isE2EBypassEnabled()) {
     const { e2eBulkImportEntries } = await import("@/lib/import/e2e-store");
     const result = await e2eBulkImportEntries(rows);
@@ -178,16 +197,6 @@ export async function bulkImportEntries(
   }
 
   const userId = await requireUserId();
-
-  // 입력 모양 빠른 검증.
-  for (const row of rows) {
-    if (!row.friendId && !row.newFriendName) {
-      throw new Error("친구 정보가 비어 있는 row 가 있어요.");
-    }
-    if (!row.categoryId) {
-      throw new Error("카테고리가 비어 있는 row 가 있어요.");
-    }
-  }
 
   const uniqueCategoryIds = Array.from(new Set(rows.map((r) => r.categoryId)));
   const uniqueFriendIds = Array.from(
