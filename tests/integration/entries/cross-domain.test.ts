@@ -14,6 +14,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
  *       update 된 뒤 카테고리 hard delete. (트랜잭션 보장 — 부분 적용 금지.)
  *   17. 친구 soft delete + entries — friends.is_deleted=true 면 listFriends 에서 친구가 빠지고
  *       listEntriesByFriend 도 빈 배열. entries DB row 자체는 그대로.
+ *   18. countEntriesByCategory — soft-deleted 친구의 entries 도 카테고리 count 에 포함된다
+ *       (PR #5 리뷰 💬 #5 결정 (b) 채택). 카테고리 강제 이전 게이트(시나리오 16)가
+ *       모든 entries 를 옮긴다는 일관성과 맞물려, count 도 같은 분모를 본다.
  */
 
 import {
@@ -232,5 +235,51 @@ describe("entries × categories / friends 결합", () => {
       dbRowExists = r.rows[0]?.c === "1";
     });
     expect(dbRowExists).toBe(true);
+  });
+
+  it("[시나리오 18] countEntriesByCategory — soft-deleted 친구의 entries 도 카테고리 count 에 포함된다 (PR #5 리뷰 💬 #5 (b) 채택)", async () => {
+    // 시드: 카테고리 1개, 친구 2명 (살아있음 + soft deleted), 각자 entry 2건씩.
+    let categoryId = "";
+    let aliveFriend = "";
+    let deletedFriend = "";
+    await asServiceRole(testDb, async () => {
+      const c = await testDb.pg.query<{ id: string }>(
+        `INSERT INTO categories (user_id, name, color, is_system, sort_order)
+         VALUES ($1, '마음', '#4ade80', true, 3) RETURNING id`,
+        [USER_A],
+      );
+      categoryId = c.rows[0]!.id;
+
+      const a = await testDb.pg.query<{ id: string }>(
+        `INSERT INTO friends (user_id, name) VALUES ($1, '살아있음') RETURNING id`,
+        [USER_A],
+      );
+      aliveFriend = a.rows[0]!.id;
+      const d = await testDb.pg.query<{ id: string }>(
+        `INSERT INTO friends (user_id, name, is_deleted) VALUES ($1, '삭제됨', true) RETURNING id`,
+        [USER_A],
+      );
+      deletedFriend = d.rows[0]!.id;
+
+      await testDb.pg.query(
+        `INSERT INTO entries
+           (user_id, friend_id, category_id, memo, received_date, repayment_timing, is_repaid)
+         VALUES
+           ($1, $2, $3, 'alive-1',   '2026-05-01', 'anytime', false),
+           ($1, $2, $3, 'alive-2',   '2026-05-02', 'anytime', false),
+           ($1, $4, $3, 'deleted-1', '2026-05-03', 'anytime', false),
+           ($1, $4, $3, 'deleted-2', '2026-05-04', 'anytime', false)`,
+        [USER_A, aliveFriend, categoryId, deletedFriend],
+      );
+    });
+
+    await actAs(USER_A);
+    const { countEntriesByCategory } = await import(
+      "@/lib/entries/category-counts"
+    );
+
+    const map = await countEntriesByCategory();
+    // 4건 모두 합산 — soft-deleted 친구의 entries 도 포함된다 ((b) 정책).
+    expect(map.get(categoryId)).toBe(4);
   });
 });
