@@ -49,8 +49,7 @@ export function CategoryDistributionChart({
   className,
   showLegend = true,
 }: CategoryDistributionChartProps) {
-  if (data.length === 0) return null;
-
+  // Hook 은 early return 보다 위에서 호출 — react-hooks/rules-of-hooks.
   // ChartConfig: category_id 를 키로 (CSS var --color-<key> 충돌 회피를 위해 safe key 변환)
   const config: ChartConfig = React.useMemo(() => {
     const acc: ChartConfig = {
@@ -73,6 +72,8 @@ export function CategoryDistributionChart({
       })),
     [data],
   );
+
+  if (data.length === 0) return null;
 
   return (
     <div className={"flex items-center gap-3 " + (className ?? "")}>
