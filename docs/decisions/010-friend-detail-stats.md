@@ -193,6 +193,56 @@ V1 마무리 메타에서 한 묶음 청산 + Vercel production 배포 점검 + 
 
 worker 라운드에서 변경 없음 확인하고 미수정 유지.
 
+## §T. peer 라운드 결과 (worker 통합 검증 직후)
+
+| 라운드 | lint | sfx |
+|---|---|---|
+| 1 | 🟢 PASS + 🟡 1건 (TODO 주석) | 🔴 0 / 🟡 2 / 🟢 3 |
+
+sfx 라운드 발견 → 모두 V1 마무리 메타 이관 (본 슬라이스 보안 의도 완전 달성, 본 슬라이스 청산 우선순위 낮음):
+
+### 🟡 should
+1. **`lib/import/mock.ts` production 번들 잔존** — `components/import/import-wizard.tsx:16` 의 unconditional import 의존. 813c254 의 production 가드는 사용자가 mock 흐름에 진입하는 경로(보안 의도)는 완전 차단했지만, mock 모듈 코드 자체가 번들에 포함됨. V1 토이 단계에서 번들 사이즈 중요도 낮음 → V1 마무리 메타에서 dynamic import 또는 NODE_ENV 분기로 청산 가능.
+2. **`lib/friends/stats.ts:94` `todayKey` TZ 경계 1개월 시프트** — Date.UTC 사용했지만 시스템 TZ 가 UTC-12 등 극단인 경우 경계 1개월 시프트 가능. 실질 영향 매우 제한적 (windowstartKey 1개월), Asia/Seoul 정착하는 V1 마무리 메타에서 PR #6 🟡 S1 와 한 묶음 청산.
+
+### 🟢 nit
+- `MOCK_MONTHLY_TREND` 미사용 export — 디자이너가 컴포넌트 단위 테스트/스토리북 용도로 남긴 것이지만 현재 사용처 없음. 정리 가능 (V2 또는 V1 마무리 메타).
+- `aggregateMonthlyTrend` 의 `maxKey > todayKey` 시드 시연 데이터(미래 received_date) 가 들어왔을 때 edge case — V1 spec 0건이라 실 위험 0.
+- 디자이너 라운드 TODO 주석 1건 — V1 마무리 메타에서 cleanup.
+
+010 §P "PR #6·#7·#8 잔여 리뷰 트레이스" 표에 본 슬라이스 sfx 새 발견 2건 추가 이관:
+
+| sfx 🟡 | mock 번들 잔존 (`lib/import/mock.ts` import-wizard:16) | V1 마무리 메타 |
+| sfx 🟡 | `lib/friends/stats.ts::todayKey` TZ 경계 (PR #6 🟡 S1 와 동일 카테고리) | V1 마무리 메타 |
+
+## §U. V1 10/10 슬라이스 도착
+
+본 PR #9 머지로 V1 코드 슬라이스 10건 완료:
+
+| # | 슬라이스 | PR |
+|---|---|---|
+| 1 | Next.js 부트스트랩 + 디자인 토큰 | #1 |
+| 2 | Google OAuth 인증 게이트 | #2 |
+| 3 | 친구 CRUD | #3 |
+| 4 | 카테고리 CRUD + /settings | #4 |
+| 5 | entries CRUD | #5 |
+| 6 | 메인 대시보드 위젯 4종 | #6 |
+| 7 | /entries 리스트·검색 페이지 | #7 |
+| 8 | 엑셀 import 5단계 워크플로우 | #8 |
+| 9 | **친구 상세 추가 통계** (본 PR) | #9 |
+| 10 | V1 마무리 메타 (다음 슬라이스) | — |
+
+다음 슬라이스 = V1 마무리 메타 — `/meta` 흐름 (디자이너·TDD 게이트·팀 spawn·peer 검증 모두 생략, Lead 단독 작업). 청산 목록:
+
+- PR #6 잔여: TZ 종속 🟡 S1 + 위젯 D byCategory N+1 🟢 N2 + locale collation
+- PR #7 잔여: parseDate semantic validation 🟢
+- PR #8 잔여: formatAmount ↔ buildMemo 한국어 단위 일관화 🟢 / ImportStepper cursor·aria-disabled 🟢 / XLSX.read file size limit 🟢
+- PR #9 잔여(본 §T): mock 번들 잔존 🟡 / todayKey TZ 경계 🟡 / MOCK_MONTHLY_TREND 미사용 🟢 / TODO 주석 🟢
+- Vercel production 배포 점검 + 환경 변수 동기화
+- README 정리 (V1 사이트맵 최종본 + 스택)
+
+V2 deferred (3건): data-memo 길이 / reorderEntries tiebreak / e2eBulkImportEntries partial atomicity.
+
 ## §S. 메타 노트 — 디자이너 골격이 본격 결합까지 흡수한 첫 케이스
 
 008 메타 노트("디자이너는 결정 로그 손대지 마라") 정합 + 009 첫 실행 + 본 010 두 번째 실행. 추가로 본 010 은 **디자이너 라운드가 worker 본격 결합까지 흡수한 첫 케이스**.
