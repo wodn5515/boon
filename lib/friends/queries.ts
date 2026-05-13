@@ -4,6 +4,7 @@ import { db } from "@/db/client";
 import { friends, type Friend } from "@/db/schema/friends";
 import { isE2EBypassEnabled } from "@/lib/auth/bypass";
 import { getCurrentUser } from "@/lib/auth/user";
+import { escapeLike } from "@/lib/utils/like-escape";
 
 /**
  * friends 도메인 read 쿼리.
@@ -39,15 +40,8 @@ async function requireUserId(): Promise<string> {
   return user.id;
 }
 
-/**
- * LIKE wildcard 문자(`%`, `_`, `\`)를 사용자 입력에서 escape 한다.
- * drizzle 의 파라미터 바인딩은 SQL injection 으로부터 보호하지만, 와일드카드는 LIKE 의미상
- * 그대로 해석돼 "검색어로 `%` 입력 시 모든 친구 매칭" 같은 UX 의도와 다른 동작을 유발한다.
- * (sfx 라운드 1 🟢 #8)
- */
-function escapeLike(input: string): string {
-  return input.replace(/[\\%_]/g, "\\$&");
-}
+// `escapeLike` 는 lib/utils/like-escape.ts 로 추출됐다 (008 §J).
+// `lib/entries-list/queries.ts` 가 같은 함수를 재요구해 부채 회피 차원에서 공용화.
 
 export async function listFriends(params: ListFriendsParams = {}): Promise<Friend[]> {
   if (isE2EBypassEnabled()) {
