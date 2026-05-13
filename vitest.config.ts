@@ -26,6 +26,11 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next", "e2e/**"],
     css: false,
+    // 결정 로그 011 §B-1 — next.config.ts env.TZ 와 같은 잠금을 vitest 호스트에도 강제한다.
+    //   CI / 로컬 호스트의 TZ 에 무관하게 KST 기준 aggregateMonthlyTrend / Date 결정성 확보.
+    env: {
+      TZ: "Asia/Seoul",
+    },
     typecheck: {
       enabled: false, // 로컬 watch 비용 회피. CI/수동 검사는 `npm run typecheck:tests` 로 일괄 수행.
       tsconfig: "./tsconfig.test.json",

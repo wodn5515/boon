@@ -41,6 +41,15 @@ const CSP_DIRECTIVES = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // 결정 로그 011 §B-1 — production / dev / Vercel 빌드 환경 모두 KST 로 잠근다.
+  //   - Vercel Functions 의 기본 TZ 는 UTC. aggregateMonthlyTrend 의 todayKey 가
+  //     KST 자정 ~ UTC 자정 사이(UTC 15:00~24:00, KST 0:00~9:00) 에 한 달 흔들리던 회귀
+  //     (PR #6 🟡 S1 + PR #9 🟡 S2) 를 일괄 차단.
+  //   - `process.env.TZ = "Asia/Seoul"` 를 Node 가 모듈 평가 직전에 인지하면
+  //     Date / Intl.DateTimeFormat 의 기본 로케일 시간대가 KST 로 정착된다.
+  env: {
+    TZ: "Asia/Seoul",
+  },
   async headers() {
     return [
       {

@@ -63,6 +63,10 @@ export default defineConfig({
       DATABASE_URL: process.env.DATABASE_URL,
       NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
       E2E_BYPASS_AUTH: process.env.E2E_BYPASS_AUTH,
+      // 결정 로그 011 §B-1 — Next.js webServer(dev) 프로세스에도 KST 잠금.
+      //   `use.timezoneId` 는 브라우저 컨텍스트만 잡지, 서버 사이드 Date 는 호스트 TZ 를 본다.
+      //   여기서 명시 주입해 자정 경계 회귀를 차단.
+      TZ: "Asia/Seoul",
     },
   },
 });
