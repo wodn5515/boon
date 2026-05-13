@@ -8,6 +8,7 @@ import { EntryItem } from "@/components/entries/entry-item";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { listCategories } from "@/lib/categories/queries";
+import { parseEntriesDate } from "@/lib/entries-list/parse-date";
 import {
   listEntriesFiltered,
   type EntriesSort,
@@ -64,10 +65,9 @@ function parseSort(raw: string): EntriesSort {
   return raw === "oldest" ? "oldest" : "recent";
 }
 
-function parseDate(raw: string): string {
-  // YYYY-MM-DD 형식만 허용 — 잘못된 입력은 빈 문자열로 무시.
-  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
-}
+// 결정 로그 011 §B-2 — semantic validation 은 lib/entries-list/parse-date.ts 가 단일 진실 원천.
+//   형식 검사 + new Date round-trip 으로 2026-13-45 / 2026-02-30 같은 invalid 날짜를 거부.
+const parseDate = parseEntriesDate;
 
 export default async function EntriesPage({ searchParams }: EntriesPageProps) {
   const params = await searchParams;
