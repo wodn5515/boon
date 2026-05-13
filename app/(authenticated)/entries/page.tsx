@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Upload } from "lucide-react";
 
 import { updateEntry, deleteEntry } from "@/app/(authenticated)/entries/actions";
@@ -121,7 +122,7 @@ export default async function EntriesPage({ searchParams }: EntriesPageProps) {
             받은 마음을 한곳에 모아 차분히 돌아봐요.
           </p>
         </div>
-        {/* 엑셀 import 진입점 — 다음 슬라이스에서 실제 페이지/모달 결합 (008 §A). */}
+        {/* 엑셀 import 진입점 (PR #7 🟢 nit 청산 / 009 §1). */}
         <Button
           asChild
           variant="outline"
@@ -129,10 +130,10 @@ export default async function EntriesPage({ searchParams }: EntriesPageProps) {
           className="gap-1.5"
           aria-label="엑셀 가져오기"
         >
-          <a href="/entries/import" aria-disabled="true" title="다음 슬라이스에서 결합 예정">
+          <Link href="/entries/import">
             <Upload aria-hidden />
             엑셀 가져오기
-          </a>
+          </Link>
         </Button>
       </div>
 
