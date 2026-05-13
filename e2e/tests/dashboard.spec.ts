@@ -138,7 +138,7 @@ test.describe("/ 메인 대시보드 위젯", () => {
 
     // 위젯 B "친구들" 안에 친구 이름이 보인다 (Link 형태).
     await expect(
-      page.getByRole("link", { name: `${friend} 상세 보기` }),
+      page.getByRole("link", { name: `${friend} 친구 카드` }),
     ).toBeVisible();
 
     // "받은 신세 N개" 패턴이 노출된다 (count 가 1 이상이어야 의미 있는 검증).
@@ -171,7 +171,7 @@ test.describe("/ 메인 대시보드 위젯", () => {
 
     // "다가오는 생일" 카드 안에 친구 이름이 등장.
     await expect(
-      page.getByRole("link", { name: `${friend} 상세 보기` }),
+      page.getByRole("link", { name: `${friend} 다가오는 생일` }),
     ).toBeVisible();
     // D-0 → "오늘" 배지.
     await expect(page.getByLabel("생일 오늘")).toBeVisible();
