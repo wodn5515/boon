@@ -11,6 +11,7 @@ import {
 import { friends } from "@/db/schema/friends";
 import { isE2EBypassEnabled } from "@/lib/auth/bypass";
 import { getCurrentUser } from "@/lib/auth/user";
+import { parseMemo } from "@/lib/entries/parse-memo";
 import { safeRevalidate } from "@/lib/server/revalidate";
 
 /**
@@ -118,11 +119,6 @@ function parseCategoryId(formData: FormData): string {
   const raw = parseString(formData, "category_id", true).trim();
   if (raw.length === 0) throw new Error("카테고리를 선택해 주세요.");
   return raw;
-}
-
-function parseMemo(formData: FormData): string {
-  // 006 §D: memo 는 NOT NULL 이지만 빈 문자열 허용.
-  return parseString(formData, "memo", false);
 }
 
 /**

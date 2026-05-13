@@ -143,15 +143,54 @@ export function e2eUpdateCategory(input: {
   });
 }
 
-export function e2eDeleteCategory(id: string): void {
+/**
+ * 카테고리 삭제 (E2E 분기, PR #5 🟢 #4 / 007 §H-4).
+ *
+ * production(`app/(authenticated)/settings/actions.ts::deleteCategory`) 와 **검증 순서·에러 메시지 동일**.
+ * 인터페이스 균질화 — 호출자가 두 분기를 같은 멘탈모델로 다룰 수 있도록.
+ *
+ * 검증 순서 (production 와 1:1):
+ *   1. 본인 소유 cross-check (다른 user 소유 또는 미존재 → silent)
+ *   2. is_system → throw "기본 카테고리는 삭제할 수 없어요."
+ *   3. entries 사용 중 + migrateTo 없으면 throw "이전할 카테고리를 선택해 주세요."
+ *   4. migrateTo === id 거절 → throw "같은 카테고리로 이전할 수 없어요."
+ *   5. migrateTo 본인 소유 cross-check → throw "이전할 카테고리를 찾을 수 없어요."
+ *   6. entries 일괄 update → 카테고리 hard delete
+ */
+export async function e2eDeleteCategory(args: {
+  id: string;
+  migrateTo: string | null;
+}): Promise<void> {
   ensureSeeded();
-  const row = store.get(id);
+  const row = store.get(args.id);
+  // (1) 본인 소유 cross-check — production 의 단순 select limit 1 silent fail 동일.
   if (!row) return;
   if (row.user_id !== FAKE_USER_ID) return;
+  // (2) is_system 방어.
   if (row.is_system) {
     throw new Error("기본 카테고리는 삭제할 수 없어요.");
   }
-  store.delete(id);
+  // (3) entries 사용 중 + migrateTo 없으면 거절.
+  // entries e2e-store 는 순환 import 회피를 위해 dynamic import 로 lazy 평가.
+  const entriesModule = await import("@/lib/entries/e2e-store");
+  const count = entriesModule.e2eCountEntriesByCategory(args.id);
+  if (count > 0) {
+    if (!args.migrateTo) {
+      throw new Error("이전할 카테고리를 선택해 주세요.");
+    }
+    // (4) self migrate 거절.
+    if (args.migrateTo === args.id) {
+      throw new Error("같은 카테고리로 이전할 수 없어요.");
+    }
+    // (5) migrateTo 본인 소유 cross-check.
+    const target = store.get(args.migrateTo);
+    if (!target || target.user_id !== FAKE_USER_ID) {
+      throw new Error("이전할 카테고리를 찾을 수 없어요.");
+    }
+    // (6) entries 일괄 update → 카테고리 hard delete (단일 in-memory step 이라 트랜잭션 불필요).
+    entriesModule.e2eMigrateEntriesCategory(args.id, args.migrateTo);
+  }
+  store.delete(args.id);
 }
 
 /**

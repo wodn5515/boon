@@ -42,13 +42,16 @@ test.describe("인증된 사용자", () => {
     expect(new URL(page.url()).pathname).toBe("/");
   });
 
-  test("[시나리오 4] / 진입 시 placeholder 페이지가 200으로 응답한다", async ({
+  test("[시나리오 4] / 진입 시 대시보드 페이지가 200으로 응답한다", async ({
     page,
   }) => {
     const response = await page.goto("/");
     expect(response?.status()).toBe(200);
     expect(new URL(page.url()).pathname).toBe("/");
-    // PR #1 placeholder 카피 — 인증된 상태에서도 그대로 노출.
-    await expect(page.getByText(/받은 마음이 바람처럼 분다/)).toBeVisible();
+    // 디자이너 88e4fa1 메인 대시보드 재작성 이후 — 인사말 heading 으로 정상 렌더 검증.
+    // (이전 PR #1 placeholder 카피 "받은 마음이 바람처럼 분다" 는 자연 폐기 — 결정 로그 007 §2.)
+    await expect(
+      page.getByRole("heading", { name: /안녕하세요/ }),
+    ).toBeVisible();
   });
 });

@@ -54,6 +54,11 @@ export const entries = pgTable("entries", {
   user_id: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  // V1 friends 는 soft delete 정책이지만 Supabase user 삭제 chain 의 일괄 정리 보장을 위해 CASCADE 채택.
+  // V1 에 friends 직접 hard delete 경로 없음 — CASCADE 발동 = user 삭제 chain (users → friends → entries).
+  // category_id 의 RESTRICT 와는 의도 비대칭: 카테고리는 강제 이전(migrateTo) 게이트가 우선이고,
+  // friends 는 사용자 자체 삭제 시점의 일괄 정리 보장이 우선이라 정책 결이 다르다.
+  // 관련: docs/decisions/007-dashboard-widgets-and-pr5-cleanup.md §H-2 (PR #5 🟢 #2)
   friend_id: uuid("friend_id")
     .notNull()
     .references(() => friends.id, { onDelete: "cascade" }),

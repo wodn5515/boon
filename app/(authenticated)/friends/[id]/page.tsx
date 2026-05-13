@@ -8,6 +8,10 @@ import {
   deleteEntry,
   updateEntry,
 } from "@/app/(authenticated)/entries/actions";
+import {
+  CategoryDistributionChart,
+  type CategoryDistributionDatum,
+} from "@/components/dashboard/category-distribution-chart";
 import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
 import { EntryItem } from "@/components/entries/entry-item";
 import { FriendDeleteDialog } from "@/components/friends/friend-delete-dialog";
@@ -104,6 +108,19 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
     category_color: r.category_color,
   }));
   const entryCount = friendEntries.length;
+
+  /**
+   * 카테고리 분포 집계 (dashboard 슬라이스 결합).
+   *
+   * 디자이너 결정 (Lead 위임):
+   *   - 위 listEntriesByFriend 결과를 그대로 GROUP BY 해서 client 차트로 넘긴다.
+   *     - 별도 SQL aggregate 쿼리(lib/dashboard/queries.getFriendCategoryDistribution) 를
+   *       만들 수도 있지만, 친구 한 명의 entries 는 보통 수십~수백 row 라
+   *       이미 fetch 한 결과 위에서 in-memory aggregate 가 충분히 저렴하고,
+   *       worker 가 별도 SQL 을 결합할 필요가 없어 슬라이스가 더 깔끔하다.
+   *   - 정렬: count DESC, name ASC tiebreak (위젯 D 와 동일 규약).
+   */
+  const friendCategoryDistribution = aggregateByCategory(friendEntries);
 
   const friendOptions: ReadonlyArray<{ id: string; name: string }> =
     friendList.map((r) => ({ id: r.id, name: r.name }));
@@ -222,7 +239,7 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
         </div>
       </Card>
 
-      {/* 통계 카드 (placeholder — 다음 dashboard-widgets 슬라이스에서 결합) */}
+      {/* 통계 카드 — dashboard 슬라이스 결합 (PRD §3 친구 상세 통계) */}
       <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card size="sm" className="px-3">
           <CardHeader className="px-0">
@@ -231,7 +248,7 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
             </CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <p className="font-heading text-3xl font-semibold text-foreground">
+            <p className="font-heading text-3xl font-semibold text-foreground tabular-nums">
               {entryCount}
               <span className="ml-1 text-sm font-normal text-muted-foreground">
                 개
@@ -247,9 +264,13 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
             </CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <p className="py-4 text-center text-xs text-muted-foreground">
-              차트는 신세가 한 개 이상 쌓이면 보여드려요.
-            </p>
+            {friendCategoryDistribution.length > 0 ? (
+              <CategoryDistributionChart data={friendCategoryDistribution} />
+            ) : (
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                차트는 신세가 한 개 이상 쌓이면 보여드려요.
+              </p>
+            )}
           </CardContent>
         </Card>
       </section>
@@ -312,4 +333,39 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
       </section>
     </main>
   );
+}
+
+/**
+ * Entry 배열을 카테고리별로 GROUP BY 집계.
+ *
+ * - category_id 가 같은 row 들을 합쳐 count 누적.
+ * - JOIN 결과의 category_name/icon/color 는 같은 category_id 의 first row 값을 사용.
+ *   (drizzle JOIN 이라 한 카테고리는 동일 메타데이터 — 첫 row 면 충분.)
+ * - 메타데이터가 없는 row 는 빠르게 skip (방어).
+ * - 정렬: count DESC, name ASC tiebreak — 위젯 D 와 동일 규약.
+ */
+function aggregateByCategory(
+  entries: ReadonlyArray<Entry>,
+): ReadonlyArray<CategoryDistributionDatum> {
+  const bucket = new Map<string, CategoryDistributionDatum>();
+  for (const e of entries) {
+    if (!e.category_name || !e.category_color) continue;
+    const prev = bucket.get(e.category_id);
+    if (prev) {
+      bucket.set(e.category_id, { ...prev, count: prev.count + 1 });
+    } else {
+      bucket.set(e.category_id, {
+        category_id: e.category_id,
+        name: e.category_name,
+        icon: e.category_icon ?? null,
+        color: e.category_color,
+        count: 1,
+      });
+    }
+  }
+  return [...bucket.values()].sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    // ko-KR locale 명시 — queries.ts 의 e2e 분기(`localeCompare(b.name, "ko")`) 및 SQL `asc(friends.name)` 와 정합 (sfx 🟢 N1).
+    return a.name.localeCompare(b.name, "ko");
+  });
 }
