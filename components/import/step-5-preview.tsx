@@ -6,6 +6,7 @@ import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { buildMemo } from "@/lib/import/memo-builder";
 import type {
   BatchSettings,
   ImportRow,
@@ -297,31 +298,5 @@ function buildImportRows({
   return { rows, newFriendsCount, matchedCount, skippedCount };
 }
 
-function buildMemo({
-  eventName,
-  name,
-  amount,
-  note,
-}: {
-  eventName: string;
-  name: string;
-  amount: string | null;
-  note: string | null;
-}): string {
-  const parts: string[] = [eventName, name];
-  if (amount && amount.trim().length > 0) {
-    const onlyDigits = amount.replace(/[^\d]/g, "");
-    if (onlyDigits.length > 0) {
-      const n = Number(onlyDigits);
-      if (Number.isFinite(n)) {
-        parts.push(`금액 ${n.toLocaleString("ko-KR")}원`);
-      } else {
-        parts.push(`금액 ${amount}`);
-      }
-    } else {
-      parts.push(`금액 ${amount}`);
-    }
-  }
-  if (note && note.trim().length > 0) parts.push(note.trim());
-  return parts.join(" · ");
-}
+// 메모 빌더는 `lib/import/memo-builder.ts::buildMemo` 단일 진실 원천 (009 §I).
+// Step 5 미리보기와 bulkImportEntries 가 같은 함수를 공유해 미리보기 == DB 메모 정합 보장.

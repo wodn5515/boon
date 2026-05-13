@@ -46,46 +46,67 @@ export function ImportStepper({ current, onStepClick }: ImportStepperProps) {
         {IMPORT_STEPS.map((step, idx) => {
           const isCompleted = idx < current;
           const isCurrent = idx === current;
-          const isClickable = onStepClick && idx < current;
+          const isClickable = Boolean(onStepClick) && idx < current;
+
+          const badge = (
+            <span
+              aria-hidden
+              className={cn(
+                "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                isCompleted && "bg-primary text-primary-foreground",
+                isCurrent &&
+                  "border-2 border-primary bg-background text-primary",
+                !isCompleted &&
+                  !isCurrent &&
+                  "border border-border bg-background text-muted-foreground",
+              )}
+            >
+              {isCompleted ? <Check className="size-3.5" /> : idx + 1}
+            </span>
+          );
+          const labelSpan = (
+            <span
+              className={cn(
+                "min-w-0 truncate text-xs sm:text-sm",
+                isCurrent && "font-semibold text-foreground",
+                isCompleted && "text-foreground",
+                !isCompleted && !isCurrent && "text-muted-foreground",
+              )}
+            >
+              {step.label}
+            </span>
+          );
+
+          // 클릭 가능한 과거 단계만 <button> — 현재/미래는 <div>로 두어 step 라벨이
+          // role="button" 매칭에 섞이지 않도록 한다 (test getByRole 회귀: 시나리오 2~6).
+          // a11y: 클릭 비활성 step 은 정적 시각화이므로 button 일 필요 없음.
+          const inner = isClickable ? (
+            <button
+              type="button"
+              onClick={() => onStepClick?.(idx)}
+              aria-label={`${idx + 1}단계로 돌아가기 — ${step.label}`}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted",
+              )}
+            >
+              {badge}
+              {labelSpan}
+            </button>
+          ) : (
+            <div
+              aria-current={isCurrent ? "step" : undefined}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left",
+              )}
+            >
+              {badge}
+              {labelSpan}
+            </div>
+          );
+
           return (
             <li key={step.id} className="flex min-w-0 flex-1 items-center gap-2">
-              {/* 단계 배지 + 라벨 */}
-              <button
-                type="button"
-                onClick={isClickable ? () => onStepClick?.(idx) : undefined}
-                disabled={!isClickable}
-                aria-current={isCurrent ? "step" : undefined}
-                className={cn(
-                  "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
-                  isClickable && "hover:bg-muted",
-                  !isClickable && "cursor-default",
-                )}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    isCompleted &&
-                      "bg-primary text-primary-foreground",
-                    isCurrent &&
-                      "border-2 border-primary bg-background text-primary",
-                    !isCompleted && !isCurrent &&
-                      "border border-border bg-background text-muted-foreground",
-                  )}
-                >
-                  {isCompleted ? <Check className="size-3.5" /> : idx + 1}
-                </span>
-                <span
-                  className={cn(
-                    "min-w-0 truncate text-xs sm:text-sm",
-                    isCurrent && "font-semibold text-foreground",
-                    isCompleted && "text-foreground",
-                    !isCompleted && !isCurrent && "text-muted-foreground",
-                  )}
-                >
-                  {step.label}
-                </span>
-              </button>
+              {inner}
 
               {/* 단계 사이 연결선 — 마지막 단계 뒤엔 없음. */}
               {idx < IMPORT_STEPS.length - 1 ? (

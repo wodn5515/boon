@@ -101,16 +101,27 @@ export function ImportWizard({
     setSettings(s);
     if (!parsed || !mapping || !mapping.name) return;
     const nameCol = mapping.name;
-    const names = parsed.rows
-      .map((r) => (r[nameCol] ?? "").trim())
-      .filter((n) => n.length > 0);
+    // (name, parsed.rows index) 페어 수집 — server action 은 names 만 받으므로
+    // 결과 rowIndex(= names 인덱스)를 parsed.rows 인덱스로 remap 해야 한다.
+    // mock 분기는 parsed.rows index 를 직접 채워 같은 결과를 만든다.
+    const indexedNames: Array<{ name: string; rowIndex: number }> = [];
+    parsed.rows.forEach((r, idx) => {
+      const n = (r[nameCol] ?? "").trim();
+      if (n.length > 0) indexedNames.push({ name: n, rowIndex: idx });
+    });
+    const names = indexedNames.map((x) => x.name);
 
     setMatchPending(true);
     setMatchError(null);
     try {
       let results: ReadonlyArray<MatchResult>;
       if (matchAction) {
-        results = await matchAction(names);
+        const raw = await matchAction(names);
+        // raw[i].rowIndex 는 names 배열 인덱스라 parsed.rows 인덱스로 remap.
+        results = raw.map((r, i) => ({
+          ...r,
+          rowIndex: indexedNames[i]?.rowIndex ?? r.rowIndex,
+        }));
       } else {
         // mock 분기 — UI 골격 시연. 실제 rowIndex 와 매핑 동기화.
         results = buildMockMatchResults(parsed, mapping);

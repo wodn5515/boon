@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
+import {
+  bulkImportAction,
+  matchAction,
+} from "@/app/(authenticated)/entries/import/actions";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { Button } from "@/components/ui/button";
 import { listCategories } from "@/lib/categories/queries";
@@ -19,8 +23,9 @@ import { listCategories } from "@/lib/categories/queries";
  *
  * 데이터 결합:
  *   - listCategories() — 일괄 설정 단계의 카테고리 select 옵션.
- *   - matchAction / bulkImportAction 은 본 슬라이스에선 미주입 → ImportWizard 가 mock 흐름 사용.
- *     worker 결합 시 `lib/import/queries.ts` 의 server action 을 props 로 주입.
+ *   - matchAction / bulkImportAction — `lib/import/queries.ts` 본격 SQL/트랜잭션을 'use server'
+ *     래퍼로 ImportWizard 에 주입 (결정 로그 009 §J·§K). mock 시연 버튼은 그대로 살아있어
+ *     사용자가 .xlsx 없이도 5단계 흐름을 살펴볼 수 있다 (§M-5).
  */
 
 export const metadata: Metadata = {
@@ -63,7 +68,11 @@ export default async function EntriesImportPage() {
       </div>
 
       <div className="mt-6">
-        <ImportWizard categoryOptions={categoryOptions} />
+        <ImportWizard
+          categoryOptions={categoryOptions}
+          matchAction={matchAction}
+          bulkImportAction={bulkImportAction}
+        />
       </div>
     </main>
   );
