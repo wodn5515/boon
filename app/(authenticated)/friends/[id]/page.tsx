@@ -14,13 +14,16 @@ import {
 } from "@/components/dashboard/category-distribution-chart";
 import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
 import { EntryItem } from "@/components/entries/entry-item";
+import { FriendActivitySummaryCard } from "@/components/friends/friend-activity-summary";
 import { FriendDeleteDialog } from "@/components/friends/friend-delete-dialog";
 import { FriendFormDialog } from "@/components/friends/friend-form-dialog";
+import { MonthlyTrendChart } from "@/components/friends/monthly-trend-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InitialAvatar } from "@/components/ui/initial-avatar";
 import { birthdayCountdownLabel } from "@/lib/friends/birthday";
 import { getFriendById, listFriends } from "@/lib/friends/queries";
+import { aggregateMonthlyTrend, summarizeActivity } from "@/lib/friends/stats";
 import { formatBirthday } from "@/lib/friends/types";
 import { listCategories } from "@/lib/categories/queries";
 import { listEntriesByFriend } from "@/lib/entries/queries";
@@ -121,6 +124,16 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
    *   - 정렬: count DESC, name ASC tiebreak (위젯 D 와 동일 규약).
    */
   const friendCategoryDistribution = aggregateByCategory(friendEntries);
+
+  // === PR #9 통계 보강 (디자이너 라운드 골격 — worker 결합 포인트) ===
+  // listEntriesByFriend 결과를 그대로 in-memory aggregate.
+  // 카테고리 분포와 동일한 패턴: 친구 한 명의 entries 는 보통 수십~수백 row 라
+  // 별도 SQL aggregate 가 필요 없고, fetch 한 결과 위에서 충분히 저렴.
+  // 자세한 결정 근거는 lib/friends/stats.ts 의 JSDoc 참조.
+  // TODO(worker): listEntriesByFriend 가 date asc 가 아닐 수 있다면 정렬 보장 확인.
+  //   summarizeActivity 는 내부에서 sort 하지만 aggregateMonthlyTrend 는 received_date 만 본다.
+  const friendMonthlyTrend = aggregateMonthlyTrend(friendEntries);
+  const friendActivity = summarizeActivity(friendEntries);
 
   const friendOptions: ReadonlyArray<{ id: string; name: string }> =
     friendList.map((r) => ({ id: r.id, name: r.name }));
@@ -273,6 +286,32 @@ export default async function FriendDetailPage({ params }: FriendDetailPageProps
             )}
           </CardContent>
         </Card>
+      </section>
+
+      {/* === PR #9 통계 보강 — 월별 추이 + 활동 요약 (디자이너 라운드 골격) ===
+          worker 결합 포인트:
+            - friendMonthlyTrend / friendActivity 는 위에서 in-memory aggregate 완료.
+            - 본 슬라이스에 새 SQL 결합은 없음.
+            - mock 데이터 시연은 컴포넌트 export (MOCK_MONTHLY_TREND) 로 확인 가능. */}
+      <section className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card size="sm" className="px-3">
+          <CardHeader className="px-0">
+            <CardTitle className="text-sm text-muted-foreground">
+              월별 추이
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-0">
+            {friendMonthlyTrend.length > 0 ? (
+              <MonthlyTrendChart data={friendMonthlyTrend} />
+            ) : (
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                추이는 신세가 한 개 이상 쌓이면 보여드려요.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <FriendActivitySummaryCard summary={friendActivity} />
       </section>
 
       {/* 받은 신세 타임라인 */}
