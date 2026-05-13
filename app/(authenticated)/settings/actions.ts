@@ -200,18 +200,10 @@ export async function deleteCategory(args: {
   if (!args.id) throw new Error("카테고리 ID 가 누락되었습니다.");
 
   if (isE2EBypassEnabled()) {
+    // 007 §H-4 / PR #5 🟢 #4: e2eDeleteCategory 가 production 와 동일 순서·동일 메시지로
+    // 검증·이전·삭제를 처리한다. 호출자는 두 분기 모두 같은 인터페이스로 호출.
     const { e2eDeleteCategory } = await import("@/lib/categories/e2e-store");
-    const { e2eCountEntriesByCategory, e2eMigrateEntriesCategory } =
-      await import("@/lib/entries/e2e-store");
-    // E2E 분기에서도 본격 결합: 묶인 entries 가 있으면 migrateTo 필수.
-    const count = e2eCountEntriesByCategory(args.id);
-    if (count > 0) {
-      if (!args.migrateTo) {
-        throw new Error("이전할 카테고리를 선택해 주세요.");
-      }
-      e2eMigrateEntriesCategory(args.id, args.migrateTo);
-    }
-    e2eDeleteCategory(args.id);
+    await e2eDeleteCategory({ id: args.id, migrateTo: args.migrateTo });
     safeRevalidate("/settings", SCOPE);
     return;
   }
