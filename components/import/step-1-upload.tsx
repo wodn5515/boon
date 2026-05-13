@@ -263,18 +263,23 @@ export function Step1Upload({ onParsed }: Step1UploadProps) {
         </Card>
       ) : null}
 
-      {/* 디자이너 라운드 mock 시연 버튼 — worker 결합 시 제거 가능 (저장 흐름 검증용). */}
-      <div className="flex items-center justify-center pt-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={handleMockClick}
-          className="text-xs text-muted-foreground"
-        >
-          예시 파일로 흐름 살펴보기
-        </Button>
-      </div>
+      {/* 디자이너 라운드 mock 시연 버튼 — dev 빌드에서만 노출.
+          production 에서는 호기심에 mock 데이터로 진행 → 가짜 친구가 본인 친구 목록에 추가되는
+          경로를 차단해야 한다 (PR #8 #3 청산). worker 결합 후에도 시연 가치는 남아 있어
+          완전 제거가 아니라 환경 가드로 좁힌다. */}
+      {process.env.NODE_ENV !== "production" ? (
+        <div className="flex items-center justify-center pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleMockClick}
+            className="text-xs text-muted-foreground"
+          >
+            예시 파일로 흐름 살펴보기
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
