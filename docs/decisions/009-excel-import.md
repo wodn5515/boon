@@ -166,6 +166,12 @@ worker spawn 프롬프트에 README 동기화 명시.
 - import history (어떤 .xlsx 를 언제 가져왔는지)
 - toast 결합 (sonner) — 시나리오 6 카피 회귀 잠금 강화 가능
 
+### worker 라운드 sfx 보고 추가 (라운드 1·2 종합)
+- **sfx 1🟡#2**: memo-builder 한국어 복합 단위(`"10만5천"`) 단순 replace 한계. 시나리오 13 통과 + 데이터 손상 아님(메모 표시 한정). V2 tokenize 기반 파서 도입 검토.
+- **sfx 1🟢#3**: `friends INSERT...RETURNING` 순서가 Postgres de-facto 보장에 의존. 다른 RDBMS 이식 시 깨질 가능성. Production Postgres 한정이라 V1 영향 없음.
+- **sfx 1🟢#4**: e2e-store partial rollback 의 실제 트랜잭션 의미 모사 한계. 본질 잠금은 pglite 통합 spec 이 담당.
+- **sfx 1🟢#5**: ImportStepper 미래 단계 SR 사용자에게 비활성 의미 전달이 라벨 텍스트 의존. `aria-disabled` / `aria-current` 보강 여지.
+
 ## §Q. 메타 노트 — 디자이너 결정 로그 권한 정책 첫 실행
 
 008 메타 노트 후 첫 슬라이스로, 디자이너가 결정 로그를 직접 작성하지 않음. 본 009 는 Lead 가 처음부터 작성.
@@ -186,3 +192,31 @@ worker 결합 작업 범위:
 7. 선작성된 spec 전부 통과 (524fb65 기준 빨강 15건 → 녹색, 통합 placeholder 통과 2건도 의미 발현 후 녹색 유지)
 
 worker 가 spec 약화 요청을 보내면 Lead 자율 판단.
+
+---
+
+## §S. worker 라운드 자율 결정 트레이스 (회상 노트, PR #8 본문 보강)
+
+worker 가 결합 중 자율로 내린 4건. 모두 spec 범위 안에서의 보강 — Lead 채택 사후 기록.
+
+### §S-1. Step 3 `specific_date` 옵션 차단 (sfx 1🟡#1 청산)
+import 흐름의 `received_date` 가 row 별로 다른 가능성이 있어, "특정 일자에 모두 보답" 의미가 깨짐. Step 3 의 보답 시점 옵션에서 `specific_date` 제거 + `bulkImportEntries` 에 defensive guard 추가(sfx 2🟢#1). entries 신규 폼은 그대로 지원.
+
+### §S-2. ImportStepper a11y 분리
+비활성 단계를 `<div>` 로 렌더 → 시나리오 2~6 의 `getByRole("button", {name:/일괄 설정/})` 가 활성 단계만 잡도록. SR 사용자의 클릭 가능 단계 인지도 자연화.
+
+### §S-3. ImportWizard `rowIndex` remap
+`matchFriendsByName` 의 names 인덱스를 `parsed.rows` 인덱스로 매핑하는 과정에서 빈 이름 행 제외 후 인덱스 어긋남 가능성을 사전 차단.
+
+### §S-4. memo-builder 한국어 자릿수 단위 zero-padding
+test-writer 시나리오 13-f 가 `"10만원"` → `100,000원` 변환 통과를 요구. 단순 단위 zero-padding(`만`→`0000` 등) 으로 통과. 복합 단위(`10만5천`)는 한계 — V2 tokenize 파서 메모(§P sfx 1🟡#2 참고).
+
+## §T. peer 라운드 결과 (요약)
+
+| 라운드 | lint | sfx |
+|---|---|---|
+| 1 | 🟢 이슈 없음 | 🔴 0 / 🟡 2 / 🟢 4 |
+| 2 (1🟡#1 청산 후) | 🟢 이슈 없음 | 🔴 0 / 🟡 0 / 🟢 1 |
+| 3 (2🟢#1 청산 후) | — | — (defensive guard 추가로 종결) |
+
+머지 차단 0건. PR #8 생성 (`https://github.com/wodn5515/boon/pull/8`).
