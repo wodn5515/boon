@@ -91,3 +91,55 @@ export async function listEntriesFiltered(params: {
   - E2E 시나리오: 필터 5종(검색/친구/카테고리/날짜/정렬) 각각의 결과 동기화, "필터 초기화" 동작, 빈 상태 분기.
   - 단위 테스트: `listEntriesFiltered` 의 빈 검색어/대소문자/날짜 경계 케이스.
 - 다음 슬라이스 결합: "엑셀 가져오기" 진입점은 본 슬라이스에서 placeholder 버튼만, 실제 import 페이지는 별도 슬라이스.
+
+---
+
+## Lead 보강 (2026-05-13, append)
+
+본 결정 로그 §A~H는 디자이너 라운드에서 작성됨 (정책상 결정 로그는 Lead 영역이지만 디자이너 자율 결정 정리라 베이스 보존). Lead가 후속 결정 보강:
+
+### I. test-writer 자율 결정 6건 채택
+1. **시나리오 21 (URL parsing 헬퍼 단위 spec) 작성 안 함** — `pickFirst/parseSort/parseDate`가 page.tsx 모듈 private 함수. 통합 시나리오 13~18이 결과 의미 잠금 충분. 필요 시 worker 결합 후 sfx 라운드에서 추가
+2. **시나리오 19 getRecentEntries 위임 강도** — "같은 데이터에서 같은 memo 시퀀스" 검증. worker가 위임 안 하고 두 함수 평행 유지해도 사용자 가시 결과 동일하면 통과 (worker 자율, 008 §F "후속 영향" 그대로)
+3. **시나리오 8 mock 위 통과** — 회귀 잠금 유효, 그대로 유지
+4. **시나리오 9 빈 상태** — test-with-reset이 e2e-store 비워줘 자연 해소
+5. **PR #6 잔여 일부 청산 명시** — TZ 종속(🟡 S1), N+1(🟢 N2), N4 트레이드오프는 본 슬라이스 작업 외, V2 메모 (§J 참고)
+6. spec 직접 커밋(154fbf9) — Lead 정리 부담 줄임
+
+### J. `escapeLike` util 공용화 결정
+- 현재 `lib/friends/queries.ts`에 `escapeLike` 함수 있음 (PR #3 sfx 🟢 #8 청산). 본 슬라이스에서 `lib/entries-list/queries.ts::escapeLike` 추가 export 필요한데, **동일 함수 2곳 복제는 부채**
+- **worker 결정**: `lib/utils/like-escape.ts` 공용 utility로 추출. `escapeLike(input: string): string` named export. friends·entries-list 모두 거기서 import
+- spec(시나리오 20)의 import 경로는 worker가 공용화 후 정해진 경로로 갱신 가능 — 다만 spec 수정은 test-writer 영역. worker는 spec import 경로 잠금 그대로(`lib/entries-list/queries.ts::escapeLike`)을 보존하기 위해 entries-list/queries.ts에서 `export { escapeLike } from "@/lib/utils/like-escape"` re-export
+- 결과: spec import 경로 변경 0, 공용 util 통합 ✅
+
+### K. PR #6 사용자 리뷰 잔여 (트레이스 보존)
+PR #6 종합 리뷰의 nit·question 중 본 슬라이스에서 청산되는 항목 없음 (모두 V1 마무리 메타 또는 V2 deferred). 본 슬라이스가 직접 다루지 않지만 트레이스 보존 차원에서 명시:
+
+| PR #6 항목 | 상태 |
+|---|---|
+| 🟡 S1 monthRange/daysUntilBirthday TZ 종속 | V1 마무리 메타 또는 V2 — PR #6 본문 명시 |
+| 🟢 N1 localeCompare "ko" | PR #6에서 청산 (68924c6) |
+| 🟢 N2 N+1 query (위젯 D byCategory) | V2 — PR #6 본문 명시 |
+| 🟢 N3 formatDiff 주석 정합 | PR #6에서 청산 (68924c6) |
+| 🟢 N4 (기타) | V2 — PR #6 본문 명시 |
+| getTopFriends production vs E2E locale 차이 | V1 마무리 메타에서 collation 정합 (사용자 코멘트 인용) |
+
+### L. README 동기화 점검
+- 사이트맵 `/entries` 이미 명시
+- 데이터 모델 변경 없음
+- "주요 기능" 표 신세 리스트/검색 행 그대로
+- 변경 없으면 worker가 PR 본문에 "README 동기화 변경 없음" 명시
+
+### M. V2 메모 추가 (Lead 보강)
+- 위젯 D byCategory N+1 해소 (group-by SQL aggregate)
+- production vs E2E locale collation 정합 (PostgreSQL collation 명시 또는 application-layer sort 통일)
+- monthRange/daysUntilBirthday Asia/Seoul timezone fix
+- entries-list 무한 스크롤 / 페이지네이션 (50건 한도 도달 시)
+
+## 결정 로그 작성 권한 메타 노트
+
+정책상 결정 로그는 Lead 영역인데 본 008은 디자이너가 §A~H를 직접 작성했다. 사용자 운영 원칙("Lead 자율 판단 + 결정 로그") 보존을 위해 다음 슬라이스부터:
+- 디자이너 에이전트는 결정 로그 손대지 말고 자율 판단 사항만 보고로 정리
+- Lead가 보고 받아 결정 로그 작성
+
+다음 슬라이스 디자이너 단발 호출 시 명시. 본 008은 정리되어 있어 베이스 보존.
